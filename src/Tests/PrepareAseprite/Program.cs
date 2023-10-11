@@ -17,7 +17,6 @@ string? config_dir = Environment.GetEnvironmentVariable("ASEPRITE_USER_FOLDER");
 if (config_dir == null)
     throw new ArgumentException("ASEPRITE_USER_FOLDER environment variable is not set, unable to give script permissions if aseprite config dir is unknown.");
 
-
 string aseprite_init_file = Path.Join(config_dir, "aseprite.ini");
 
 Console.WriteLine($"Using following ini file: {aseprite_init_file}");

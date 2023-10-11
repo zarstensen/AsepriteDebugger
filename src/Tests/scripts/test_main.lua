@@ -1,15 +1,6 @@
-io.output("/test_log.txt")
 
-function print(...)
+local status, msg = xpcall(dofile, debug.traceback, app.params.test_script)
 
-    local string_args = { }
-
-    for _, arg in pairs({...}) do
-        table.insert(string_args, tostring(arg))
-    end
-
-    io.write("ASE OUT: ", table.unpack(string_args), "\n")
-    io.flush()
+if not status then
+    print(msg)
 end
-
-dofile(app.params.test_script)

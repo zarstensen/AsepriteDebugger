@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Hosting;
+using Newtonsoft.Json.Linq;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
@@ -15,7 +16,6 @@ namespace AsepriteDebuggerTest
     {
         const string endpoint = "http://127.0.0.1:8181";
         const string debugger_route = "/ws";
-        const string test_route = "/test_ws";
 
         delegate Task MockDebugAdapter(WebSocket socket);
 
@@ -23,6 +23,8 @@ namespace AsepriteDebuggerTest
         Process? aseprite_proc = null;
         WebApplication? test_app = null;
         CancellationTokenSource app_token = new();
+        bool use_xvfb = false;
+        string script_log;
 
         bool has_failed = false;
         string? fail_message = null;
@@ -32,17 +34,26 @@ namespace AsepriteDebuggerTest
 
         public void Dispose()
         {
-            string script_log = Environment.GetEnvironmentVariable("ASEDEB_SCRIPT_LOG") ?? "";
+
+            try
+            {
+                if (!aseprite_proc?.HasExited ?? false)
+                {
+                    if (use_xvfb)
+                        aseprite_proc?.Close();
+                    else
+                        aseprite_proc?.CloseMainWindow();
+
+                    aseprite_proc?.WaitForExit();
+                }
+            } catch (InvalidOperationException) { }
 
             if (File.Exists(script_log))
             {
-                output.WriteLine("SCRIPT LOG: ");
+                output.WriteLine("\n========== SCRIPT LOG ==========\n");
                 output.WriteLine(File.ReadAllText(script_log));
                 File.Delete(script_log);
             }
-
-            if(!aseprite_proc?.HasExited ?? false)
-                aseprite_proc?.Close();
 
             try
             {
@@ -60,37 +71,42 @@ namespace AsepriteDebuggerTest
         }
 
         [Fact]
-        public async Task Test1() => await testAsepriteDebugger("script.lua", timeout: 7, async ws =>
+        public async Task InitializeTest() => await testAsepriteDebugger("script.lua", timeout: 1, async ws =>
         {
-            output.WriteLine("ATTEMPT RECIEVE");
-            string response = await recieveWebsocketText(ws);
-            output.WriteLine(response);
+            JObject initialize_request = new();
 
-            wsAssert("Established Connection" == response, $"Invalid response: {response}");
-            
-        });
+            initialize_request["seq"] = 1;
+            initialize_request["type"] = "request";
+            initialize_request["command"] = "initialize";
+            initialize_request["arguments"] = new JObject();
+            initialize_request["arguments"]!["adapterID"] = "Mock-Debug-Adapter";
 
-        [Fact]
-        public async Task Test2() => await testAsepriteDebugger("script.lua", timeout: 7, async ws =>
-        {
-            output.WriteLine("ATTEMPT RECIEVE");
-            string response = await recieveWebsocketText(ws);
-            output.WriteLine(response);
+            await ws.SendAsync(Encoding.ASCII.GetBytes(initialize_request.ToString()), WebSocketMessageType.Text, true, app_token.Token);
 
-            wsAssert("Established Connection".Length == response.Length, $"Invalid response: {response}");
+            JObject response = JObject.Parse(await recieveWebsocketText(ws));
+            output.WriteLine(response.ToString());
+
+            wsAssert(response["command"]?.Value<string>() == "initialize", $"Invalid command: {response["command"]?.ToString()}");
+            wsAssert(response["request_seq"]?.Value<int>() == 1, $"Invalid request_seq: {response["request_seq"]?.ToString()}");
+
+            // check some values
+
+            wsAssert(response["body"]?["supportsConfigurationDoneRequest"]?.Value<bool>() ?? false, "Invalid value for field: supportsConfigurationDoneRequest");
+
         });
 
         private async Task testAsepriteDebugger(string test_script, double timeout, MockDebugAdapter test_func)
         {
             // check that the test script exists.
 
-            string test_src = Environment.GetEnvironmentVariable("ASEDEB_TEST_SCRIPT_DIR") ?? "";
+            string test_src = Environment.GetEnvironmentVariable("ASEDEB_TEST_SCRIPT_DIR") ?? "../../../../scripts";
 
             string test_main = Path.Join(test_src, "test_main.lua");
 
             Assert.True(File.Exists(test_main), $"Could not find main script: {test_main}");
             Assert.True(File.Exists(Path.Join(test_src, test_script)), $"Could not find test script: {Path.Join(test_src, test_script)}");
 
+            script_log = Environment.GetEnvironmentVariable("ASEDEB_SCRIPT_LOG") ?? "./debug_log.txt";
 
             // setup web app.
 
@@ -104,7 +120,6 @@ namespace AsepriteDebuggerTest
 
             test_app.Map(debugger_route, async context =>
             {
-                output.WriteLine("CONNECT ATTEMPT");
                 Assert.True(context.WebSockets.IsWebSocketRequest, "Incomming request was not a websocket.");
 
                 using (WebSocket web_socket = await context.WebSockets.AcceptWebSocketAsync())
@@ -115,14 +130,6 @@ namespace AsepriteDebuggerTest
                 app_token.Cancel();
             });
 
-            test_app.Map(test_route, async context =>
-            {
-                Assert.True(context.WebSockets.IsWebSocketRequest, "Incomming request was not a websocket.");
-
-                using (WebSocket web_socket = await context.WebSockets.AcceptWebSocketAsync())
-                    await web_socket.SendAsync(Encoding.ASCII.GetBytes(test_script), WebSocketMessageType.Text, true, CancellationToken.None);
-            });
-
             Task run_task = test_app.RunAsync(app_token.Token);
 
             output.WriteLine($"Running websocket at {endpoint}{debugger_route}");
@@ -130,9 +137,11 @@ namespace AsepriteDebuggerTest
             // start aseprite with debugger.
 
             aseprite_proc = new Process();
-            //     
-            aseprite_proc.StartInfo.FileName = "xvfb-run";
-            aseprite_proc.StartInfo.Arguments = $"aseprite --script-param debugger_endpoint=\"{endpoint}{debugger_route}\" --script-param test_script=\"{test_script}\" --script \"{test_main}\"";
+
+            use_xvfb = (Environment.GetEnvironmentVariable("ASEDEB_TEST_XVFB")?.ToLower() ?? "false") == "true";
+
+            aseprite_proc.StartInfo.FileName = use_xvfb ? "xvfb-run" : "aseprite";
+            aseprite_proc.StartInfo.Arguments = $"{(use_xvfb ? "aseprite" : "" )} --script-param debugger_endpoint=\"{endpoint}{debugger_route}\" --script-param test_script=\"{test_script}\" --script-param debug_log_file=\"{script_log}\" --script \"{test_main}\"";
             aseprite_proc.StartInfo.RedirectStandardOutput = true;
             aseprite_proc.StartInfo.RedirectStandardError = true;
             aseprite_proc.StartInfo.RedirectStandardInput = true;

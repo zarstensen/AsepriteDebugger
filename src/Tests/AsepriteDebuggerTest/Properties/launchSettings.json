@@ -1,6 +1,6 @@
 {
   "profiles": {
-    "LuaDebuggerTest": {
+    "AsepriteDebuggerTest": {
       "commandName": "Project",
       "launchBrowser": true,
       "environmentVariables": {

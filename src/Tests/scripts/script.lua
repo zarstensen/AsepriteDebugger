@@ -1,6 +1,3 @@
-print("HELLO HOW IS IT GOING :)")
-print(debug.getinfo(1, "S").source)
-
 require 'Debugger'
 
 Debugger.init()

@@ -22,7 +22,6 @@ FROM dotnet-sdk AS test-build
     # we also copy the debugger to the test script folder,
     # to simplify some of the permission giving in later stages.    
     COPY /src/Debugger/ /src/Tests/scripts/
-
     COPY /src/Tests/scripts/ /src/Tests/scripts/
 
 ################################################################################
@@ -125,5 +124,6 @@ FROM dotnet-sdk AS tests
 
     ENV ASEDEB_TEST_SCRIPT_DIR /src/Tests/scripts
     ENV ASEDEB_SCRIPT_LOG /test_log.txt
+    ENV ASEDEB_TEST_XVFB true
 
     CMD [ "dotnet", "test", "--no-build" ]

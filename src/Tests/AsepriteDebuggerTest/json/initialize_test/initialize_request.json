@@ -1,0 +1,6 @@
+{
+  "command": "initialize",
+  "arguments": {
+    "adapterID": "Mock-Debug-Adapter"
+  }
+}

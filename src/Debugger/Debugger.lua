@@ -97,8 +97,14 @@ function P.init(endpoint)
 
     P.ws:connect()
 
+    print(P.ws)
+
     P.handles[P.initialize] = true
 
+end
+
+function P.onConnect(callback)
+    P._on_connect_callback = callback
 end
 
 --- Stop debugging and disconnect from the debug adapter.
@@ -193,6 +199,10 @@ function P._onWebsocketRecieve(message_type, message)
     -- therefore we wrap the body of this function inside another function which we call in protected mode,
     -- to capture and print any errors.
     local function fn()
+        if message_type == WebSocketMessageType.OPEN and P._on_connect_callback then
+            P._on_connect_callback()
+        end
+
         if message_type == WebSocketMessageType.TEXT then
             local message = Json.decode(message)
             P.handleMessage(message)

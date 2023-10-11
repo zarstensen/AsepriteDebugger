@@ -1,0 +1,14 @@
+{
+  "supportsEvaluateForHovers": false,
+  "supportsConditionalBreakpoints": false,
+  "supportsBreakpointLocationsRequest": false,
+  "supportsFunctionBreakpoints": false,
+  "supportsDelayedStackTraceLoading": false,
+  "supportsDataBreakpoints": false,
+  "supportsExceptionInfo": false,
+  "supportsSetExpression": false,
+  "supportsSetVariable": false,
+  "supportsLogPoints": false,
+  "supportsConfigurationDoneRequest": true,
+  "supportsHitConditionalBreakpoints": false
+}

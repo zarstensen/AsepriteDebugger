@@ -5,7 +5,7 @@
     <TargetFramework>net7.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyVersion>1.0.0.56</AssemblyVersion>
+    <AssemblyVersion>1.0.0.33656</AssemblyVersion>
   </PropertyGroup>
 
 </Project>

@@ -119,7 +119,7 @@ namespace AsepriteDebuggerTest
         /// Test if the debugger responds correctly to an initialize request.
         /// </summary>
         [Fact]
-        public async Task InitializeTest() => await testAsepriteDebugger(timeout: 30, "debugger_init.lua", async ws =>
+        public async Task InitializeTest() => await testAsepriteDebugger(timeout: 30, "initialize_test.lua", async ws =>
         {
             JObject initialize_request = parseRequest("initialize_test/initialize_request.json");
 

@@ -11,19 +11,13 @@ FROM mcr.microsoft.com/dotnet/sdk:7.0-bookworm-slim AS dotnet-sdk
 # stage for setting up and building test proj.
 FROM dotnet-sdk AS test-build
 
-    COPY /src/Tests/AsepriteDebuggerTest/ /src/Tests/AsepriteDebuggerTest/
+    COPY /src/ /src/
 
     WORKDIR /src/Tests/AsepriteDebuggerTest/
 
     RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
         dotnet build
     
-
-    # we also copy the debugger to the test script folder,
-    # to simplify some of the permission giving in later stages.    
-    COPY /src/Debugger/ /src/Tests/scripts/
-    COPY /src/Tests/scripts/ /src/Tests/scripts/
-
 ################################################################################
 # stage for compiling aseprite in the required configuration.
 FROM debian:12-slim as aseprite-build
@@ -35,7 +29,7 @@ FROM debian:12-slim as aseprite-build
         rm -f /etc/apt/apt.conf.d/docker-clean \
         && apt-get update\
         && apt-get install -y git unzip curl \
-        #Aseprite build dependencies
+        # Aseprite build dependencies
         g++ clang libc++-dev libc++abi-dev cmake ninja-build libx11-dev libxcursor-dev libxi-dev libgl1-mesa-dev libfontconfig1-dev
 
     # build aseprite executable
@@ -91,13 +85,11 @@ FROM dotnet-sdk AS test-prepare
     # How exactly this is done, can be seen in the PrepareAseprite c# script.
 
     COPY /src/Tests/PrepareAseprite/ /src/Tests/PrepareAseprite/
-    COPY /src/Tests/scripts/ /src/Tests/scripts/
-    COPY /src/Debugger/ /src/Tests/scripts/
+    COPY /src/Debugger/ /root/.config/aseprite/extensions/!AsepriteDebugger/
 
     WORKDIR /src/Tests/PrepareAseprite/
 
     # environment variables are required for the script.
-    ENV ASEDEB_TEST_SCRIPT_DIR /src/Tests/scripts/
     ENV ASEPRITE_USER_FOLDER /root/.config/aseprite/
 
     RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
@@ -122,8 +114,9 @@ FROM dotnet-sdk AS tests
 
     WORKDIR /src/Tests/AsepriteDebuggerTest/
 
-    ENV ASEDEB_TEST_SCRIPT_DIR /src/Tests/scripts
-    ENV ASEDEB_SCRIPT_LOG /test_log.txt
+    ENV ASEPRITE_USER_FOLDER /root/.config/aseprite/
+    # ENV ASEDEB_SCRIPT_LOG /test_log.txt
     ENV ASEDEB_TEST_XVFB true
+
 
     CMD [ "dotnet", "test", "--no-build" ]

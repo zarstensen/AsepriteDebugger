@@ -1,4 +1,3 @@
-print(debug.getinfo(1, "S").source)
 local Json = require "json.json"
 
 ---@class Debugger
@@ -14,22 +13,6 @@ if _REQUIREDNAME == nil then
     Debugger = P
 else
     _G[_REQUIREDNAME] = P
-end
-
--- overload print function, as it otherwise prints to aseprites built in console.
-if app.params and app.params.debug_log_file then
-    io.output(app.params.debug_log_file)
-    
-    function print(...)
-
-        for _, arg in pairs({...}) do
-            io.write(tostring(arg), "\t")
-        end
-
-        io.write('\n')
-        io.flush()
-
-    end
 end
 
 ---@class Response Class responsible for sending response messages to a specific request.
@@ -86,7 +69,7 @@ function P.init(endpoint)
     
     -- connect to debug adapter
     if app.params then
-        endpoint = endpoint or app.params.debugger_endpoint
+        endpoint = endpoint or ASEDEB_CONFIG.endpoint
     end
 
     P.ws = WebSocket{
@@ -103,6 +86,8 @@ function P.init(endpoint)
 
 end
 
+--- calls the callback function when the debugger has connected to a debug adapter.
+---@param callback fun(): nil
 function P.onConnect(callback)
     P._on_connect_callback = callback
 end

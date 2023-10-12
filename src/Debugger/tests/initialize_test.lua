@@ -1,5 +1,7 @@
 require 'Debugger'
 
+print("Performing test script")
+
 Debugger.init()
 Debugger.onConnect(function()
     testAssert(debug.gethook(), "Debugger hook was not set!")

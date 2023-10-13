@@ -1,4 +1,4 @@
-local Json = require "json.json"
+local json = dofile('json/json.lua')
 
 ---@class Debugger
 ---@field handles table<fun(request: table, response: table, args: table), boolean>
@@ -42,7 +42,7 @@ function Response:send(body)
         command = self.request.command,
     })
 
-    P.ws:sendText(Json.encode(response))
+    P.ws:sendText(json.encode(response))
 end
 
 --- Sends an error response to the connected debug adapter.
@@ -58,7 +58,7 @@ function Response:sendError(error_message, short_message)
         command = self.request.command,
     })
 
-    P.ws:sendText(Json.encode(response))
+    P.ws:sendText(json.encode(response))
 end
 
 --- Sets up the debug hook and connects to the debug adapter listening for websockets at the passed endpoint (or app.params.debugger_endpoint)
@@ -150,7 +150,7 @@ function P.event(event_type, body)
         body = body
     })
 
-    P.ws:sendText(Json.encode(event))
+    P.ws:sendText(json.encode(event))
 end
 
 --- Construct a new message of the specified type.
@@ -180,7 +180,7 @@ end
 
 function P._onWebsocketRecieve(message_type, message)
     -- as the websocket recieves happen on a different thread or something,
-    -- an xpcall will not capture any errors which happen in the following code.
+    -- the xpcall in the entry point will not capture any errors which happen in the following code.
     -- therefore we wrap the body of this function inside another function which we call in protected mode,
     -- to capture and print any errors.
     local function fn()
@@ -189,8 +189,9 @@ function P._onWebsocketRecieve(message_type, message)
         end
 
         if message_type == WebSocketMessageType.TEXT then
-            local message = Json.decode(message)
+            local message = json.decode(message)
             P.handleMessage(message)
+            -- TODO: handle callbacks
         end
     end
 

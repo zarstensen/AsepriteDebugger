@@ -1,37 +1,37 @@
 ---
---- This file is used to generate the actual entry point for the debugger extension.
---- Any !<VAR> will be replaced with a valid lua expression once the entry point is generated.
---- This is done as it is not possible to pass arguments to extensions when starting aseprite,
---- so instead we generate source code, which contains relevant arguments.
+--- Entry point for debugger extension.
 ---
 
-print(debug.getinfo(1, "S").source)
+-- json is local here, as we do not want to pollute tests with this package, in case we are in a test configuration.
+local json = dofile('json/json.lua')
 
-local json = require 'json.json'
-
+-- configuration file should store the debug adapter endpoint, the debugger log file, and optionally test mode and test script.
+-- can be accessed through all scripts with the ASEDEB_CONFIG global.
 local config_file = io.open(app.fs.joinPath(app.fs.userConfigPath, "extensions/!AsepriteDebugger/config.json"), "r")
 ASEDEB_CONFIG = json.decode(config_file:read("a"))
 config_file:close()
 
--- overload print function, as it otherwise prints to aseprites built in console.
-io.output(ASEDEB_CONFIG.log_file)
+if ASEDEB_CONFIG.log_file then
+    -- overload print function, as it otherwise prints to aseprites built in console.
+    io.output(ASEDEB_CONFIG.log_file)
 
-function print(...)
+    function print(...)
 
-    for _, arg in pairs({...}) do
-        io.write(tostring(arg), "\t")
+        for _, arg in pairs({...}) do
+            io.write(tostring(arg), "\t")
+        end
+
+        io.write('\n')
+        io.flush()
+
     end
-
-    io.write('\n')
-    io.flush()
-
 end
 
-if ASEDEB_CONFIG.test_mode then
-    dofile("tests/test_main.lua")
-    return
+if not ASEDEB_CONFIG.test_mode then
+    Debugger = dofile('Debugger.lua')
+
+    Debugger.init(ASEDEB_CONFIG.endpoint)
+else
+    -- we want to run a different entry point if we are in test mode.
+    dofile('tests/test_main.lua')
 end
-
-require 'Debugger'
-
-Debugger.init(ASEDEB_CONFIG.endpoint)

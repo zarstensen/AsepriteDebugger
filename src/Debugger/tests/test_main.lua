@@ -1,4 +1,6 @@
-local json = require('json.json')
+--- 
+--- Entry point for debugger extension in test configuration.
+--- 
 
 --- Checks that the given condition is true, 
 --- and sends an assert json object back to the mock debug adapter with the passed message if not.
@@ -27,5 +29,4 @@ end
 
 -- wrap all test scripts in an xpcall, to capture any failures during test execution.
 local status, msg = xpcall(dofile, debug.traceback, ASEDEB_CONFIG.test_script)
-
 testAssert(status, msg)

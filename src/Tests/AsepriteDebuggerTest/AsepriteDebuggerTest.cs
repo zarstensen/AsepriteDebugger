@@ -105,8 +105,8 @@ namespace AsepriteDebuggerTest
 
             // remove debugger from aseprite
 
-            if(Directory.Exists(Path.Combine(aseprite_config_dir, "extensions/!AsepriteDebugger")) && false)
-                Directory.Delete(Path.Combine(aseprite_config_dir, "extensions/!AsepriteDebugger"), true);
+            if(Directory.Exists(Path.Combine(aseprite_config_dir, $"extensions/{EXT_NAME}")) && false)
+                Directory.Delete(Path.Combine(aseprite_config_dir, $"extensions/{EXT_NAME}"), true);
 
             // close mock debug adapter
             try
@@ -130,7 +130,7 @@ namespace AsepriteDebuggerTest
         /// Test if the debugger responds correctly to an initialize request.
         /// </summary>
         [Fact]
-        public async Task InitializeTest() => await testAsepriteDebugger(timeout: 3, "initialize_test.lua", async ws =>
+        public async Task InitializeTest() => await testAsepriteDebugger(timeout: 30, "initialize_test.lua", async ws =>
         {
             JObject initialize_request = parseRequest("initialize_test/initialize_request.json");
 
@@ -167,12 +167,39 @@ namespace AsepriteDebuggerTest
         /// <param name="test_func"> c# function to run, when a websocket has connected to the mock debug adapter. </param>
         private async Task testAsepriteDebugger(double timeout, string test_script, MockDebugAdapter test_func)
         {
-            // check that the test script exists.
-
             Assert.True(File.Exists(Path.Join("Debugger/tests", test_script)), $"Could not find test script: {Path.Join("Debugger/tests", test_script)}");
 
-            // setup web app.
+            Task run_task = runMockDebugAdapter(test_func);
 
+            installDebugger(test_script);
+
+            runAseprite();
+
+            Assert.False(aseprite_proc.HasExited, $"Aseprite exited with code {(aseprite_proc.HasExited ? aseprite_proc.ExitCode : null)}");
+
+            mock_debug_adapter.WaitForShutdownAsync().Wait((int)(timeout * 1000));
+
+            Assert.False(websocket_failed, websocket_fail_message);
+
+            // check if web application is still running.
+
+            try
+            {
+                HttpClient client = new();
+                HttpResponseMessage response = await client.GetAsync(ENDPOINT);
+
+                Assert.Fail($"Mock debug adapter was still running after timeout. ({timeout} s)\nStage:\t{stage_msg ?? "Unknown"}");
+            } catch(HttpRequestException) { }
+
+            await run_task;
+        }
+
+        /// <summary>
+        /// Starts a web application which listens for a websocket and redirects it to the passed test function.
+        /// </summary>
+        /// <param name="test_func"></param>
+        private async Task runMockDebugAdapter(MockDebugAdapter test_func)
+        {
             WebApplicationBuilder app_builder = WebApplication.CreateBuilder();
             app_builder.WebHost.UseUrls(ENDPOINT);
 
@@ -191,7 +218,7 @@ namespace AsepriteDebuggerTest
                     {
                         await test_func(web_socket);
                     }
-                    catch(TaskCanceledException) { }
+                    catch (TaskCanceledException) { }
                     catch (Exception ex)
                     {
                         // if exception was caused by an wsAssert, we do not want to overwrite the assert message,
@@ -203,66 +230,16 @@ namespace AsepriteDebuggerTest
                 }
             });
 
-            Task run_task = mock_debug_adapter.RunAsync(web_app_token.Token);
-
             output.WriteLine($"Running websocket at {ENDPOINT}{DEBUGGER_ROUTE}");
-
-
-            // start aseprite with debugger.
-
-            injectDebugger(test_script);
-
-            aseprite_proc = new Process();
-
-            aseprite_proc.StartInfo.FileName = use_xvfb ? "xvfb-run" : "aseprite";
-            aseprite_proc.StartInfo.Arguments = use_xvfb ? "aseprite" : "";
-            aseprite_proc.StartInfo.RedirectStandardOutput = true;
-            aseprite_proc.StartInfo.RedirectStandardError = true;
-            aseprite_proc.StartInfo.RedirectStandardInput = true;
-            aseprite_proc.StartInfo.UseShellExecute = false;
-            aseprite_proc.StartInfo.WorkingDirectory = Directory.GetCurrentDirectory();
-
-            aseprite_proc.ErrorDataReceived += (s, e) => {
-                if (e.Data != null && e.Data != string.Empty)
-                    output.WriteLine($"ASE ERR: {e.Data}");
-            };
-            
-            aseprite_proc.OutputDataReceived += (s, e) => {
-                if (e.Data != null && e.Data != string.Empty)
-                    output.WriteLine($"ASE OUT: {e.Data}");
-            };
-
-            Assert.True(aseprite_proc.Start());
-
-            aseprite_proc.BeginErrorReadLine();
-            aseprite_proc.BeginOutputReadLine();
-
-            // check if aseprite is still running or exited with error.
-
-            Assert.False(aseprite_proc.HasExited, $"Aseprite exited with code {(aseprite_proc.HasExited ? aseprite_proc.ExitCode : null)}");
-
-            // wait timeout
-
-            mock_debug_adapter.WaitForShutdownAsync().Wait((int)(timeout * 1000));
-
-            // check for websocket failures
-
-            Assert.False(websocket_failed, websocket_fail_message);
-
-            // check if web application is still running.
-
-            try
-            {
-                HttpClient client = new();
-                HttpResponseMessage response = await client.GetAsync(ENDPOINT);
-
-                Assert.True(false, $"Mock debug adapter was still running after timeout. ({timeout} s)\nStage:\t{stage_msg ?? "Unknown"}");
-            } catch(HttpRequestException) { }
-
-            await run_task;
+            await mock_debug_adapter.RunAsync(web_app_token.Token);
         }
+
         
-        private void injectDebugger(string test_script)
+        /// <summary>
+        /// Installs the debugger extension at ASEPRITE_USER_FOLDER, and configures it to run the passed test script in test mode.
+        /// </summary>
+        /// <param name="test_script"></param>
+        private void installDebugger(string test_script)
         {
             // copy to extension directory.
 
@@ -277,7 +254,7 @@ namespace AsepriteDebuggerTest
                     copyDir(sub_dir, new DirectoryInfo(Path.Combine(dest_dir.FullName, sub_dir.Name)));
             }
 
-            string dest_dir = Path.Combine(aseprite_config_dir, "extensions/!AsepriteDebugger");
+            string dest_dir = Path.Combine(aseprite_config_dir, $"extensions/{EXT_NAME}");
 
             copyDir(new("Debugger"), new(dest_dir));
 
@@ -289,6 +266,40 @@ namespace AsepriteDebuggerTest
             config["log_file"] = new FileInfo(script_log).FullName;
 
             File.WriteAllText(Path.Combine(dest_dir, "config.json"), config.ToString());
+        }
+
+        /// <summary>
+        /// 
+        /// Start an aseprite process, where its output is redirected to test output.
+        /// Uses xvfb-run is use_xvfb is true.
+        /// 
+        /// </summary>
+        private void runAseprite()
+        {
+            aseprite_proc = new Process();
+
+            aseprite_proc.StartInfo.FileName = use_xvfb ? "xvfb-run" : "aseprite";
+            aseprite_proc.StartInfo.Arguments = use_xvfb ? "aseprite" : "";
+            aseprite_proc.StartInfo.RedirectStandardOutput = true;
+            aseprite_proc.StartInfo.RedirectStandardError = true;
+            aseprite_proc.StartInfo.RedirectStandardInput = true;
+            aseprite_proc.StartInfo.UseShellExecute = false;
+            aseprite_proc.StartInfo.WorkingDirectory = Directory.GetCurrentDirectory();
+
+            aseprite_proc.ErrorDataReceived += (s, e) => {
+                if (e.Data != null && e.Data != string.Empty)
+                    output.WriteLine($"ASE ERR: {e.Data}");
+            };
+
+            aseprite_proc.OutputDataReceived += (s, e) => {
+                if (e.Data != null && e.Data != string.Empty)
+                    output.WriteLine($"ASE OUT: {e.Data}");
+            };
+
+            Assert.True(aseprite_proc.Start());
+
+            aseprite_proc.BeginErrorReadLine();
+            aseprite_proc.BeginOutputReadLine();
         }
 
         /// <summary>

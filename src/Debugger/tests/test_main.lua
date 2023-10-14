@@ -28,5 +28,5 @@ function testAssert(condition, message)
 end
 
 -- wrap all test scripts in an xpcall, to capture any failures during test execution.
-local status, msg = xpcall(dofile, debug.traceback, ASEDEB_CONFIG.test_script)
+local status, msg = xpcall(dofile, debug.traceback, ASEDEB.config.test_script)
 testAssert(status, msg)

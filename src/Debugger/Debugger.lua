@@ -1,4 +1,4 @@
-local json = dofile('json/json.lua')
+local json = ASEDEB.json
 
 ---@class Debugger
 ---@field handles table<fun(request: table, response: table, args: table), boolean>
@@ -69,7 +69,7 @@ function P.init(endpoint)
     
     -- connect to debug adapter
     if app.params then
-        endpoint = endpoint or ASEDEB_CONFIG.endpoint
+        endpoint = endpoint or ASEDEB.config.endpoint
     end
 
     P.ws = WebSocket{

@@ -1,4 +1,4 @@
-Debugger = dofile('Debugger.lua')
+local Debugger = ASEDEB.Debugger
 
 Debugger.init()
 

@@ -2,6 +2,8 @@
 
 ARG ASEPRITE_VERSION="v1.3-rc6"
 ARG ASEPRITE_SKIA_VERSION="m102-861e4743af"
+ARG ASEPRITE_USER_FOLDER="/root/.config/aseprite/"
+ARG ASEPRITE_EXT_FOLDER="!AsepriteDebugger"
 
 # 7.0-bookworm-slim is on debian 12, which is also where aseprite is compiled.
 # if these verisons do not match, the container might exit with an segmentation fault.
@@ -85,12 +87,16 @@ FROM dotnet-sdk AS test-prepare
     # How exactly this is done, can be seen in the PrepareAseprite c# script.
 
     COPY /src/Tests/PrepareAseprite/ /src/Tests/PrepareAseprite/
-    COPY /src/Debugger/ /root/.config/aseprite/extensions/!AsepriteDebugger/
+
+    ARG ASEPRITE_USER_FOLDER
+    ARG ASEPRITE_EXT_FOLDER
+
+    COPY /src/Debugger/ ${ASEPRITE_USER_FOLDER}/extensions/${ASEPRITE_EXT_FOLDER}
 
     WORKDIR /src/Tests/PrepareAseprite/
 
     # environment variables are required for the script.
-    ENV ASEPRITE_USER_FOLDER /root/.config/aseprite/
+    ENV ASEPRITE_USER_FOLDER ${ASEPRITE_USER_FOLDER}
 
     RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
         dotnet run
@@ -109,14 +115,15 @@ FROM dotnet-sdk AS tests
 
     COPY --from=aseprite-build usr/src/aseprite/build/bin/ /bin/
     COPY --from=aseprite-build aseprite/dependencies/lib/ /lib/
-    COPY --from=test-prepare /root/.config/aseprite/ /root/.config/aseprite/
+
+    ARG ASEPRITE_USER_FOLDER
+
+    COPY --from=test-prepare ${ASEPRITE_USER_FOLDER} ${ASEPRITE_USER_FOLDER}
     COPY --from=test-build /src/ /src/
 
     WORKDIR /src/Tests/AsepriteDebuggerTest/
 
-    ENV ASEPRITE_USER_FOLDER /root/.config/aseprite/
-    # ENV ASEDEB_SCRIPT_LOG /test_log.txt
+    ENV ASEPRITE_USER_FOLDER ${ASEPRITE_USER_FOLDER}
     ENV ASEDEB_TEST_XVFB true
-
 
     CMD [ "dotnet", "test", "--no-build" ]

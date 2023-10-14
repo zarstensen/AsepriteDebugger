@@ -2,18 +2,21 @@
 --- Entry point for debugger extension.
 ---
 
--- json is local here, as we do not want to pollute tests with this package, in case we are in a test configuration.
-local json = dofile('json/json.lua')
+-- global aseprite debugger namespace.
+ASEDEB = {}
+
+ASEDEB.json = dofile('json/json.lua')
 
 -- configuration file should store the debug adapter endpoint, the debugger log file, and optionally test mode and test script.
 -- can be accessed through all scripts with the ASEDEB_CONFIG global.
 local config_file = io.open(app.fs.joinPath(app.fs.userConfigPath, "extensions/!AsepriteDebugger/config.json"), "r")
-ASEDEB_CONFIG = json.decode(config_file:read("a"))
+ASEDEB.config = ASEDEB.json.decode(config_file:read("a"))
 config_file:close()
 
-if ASEDEB_CONFIG.log_file then
+if ASEDEB.config.log_file then
     -- overload print function, as it otherwise prints to aseprites built in console.
-    io.output(ASEDEB_CONFIG.log_file)
+    print("BEFORE OUT")
+    io.output(ASEDEB.config.log_file)
 
     function print(...)
 
@@ -25,13 +28,15 @@ if ASEDEB_CONFIG.log_file then
         io.flush()
 
     end
+
+    print("AFTER OUT")
 end
 
-if not ASEDEB_CONFIG.test_mode then
-    Debugger = dofile('Debugger.lua')
+-- load debugger package here, to make sure its source path matches up with the path used when giving script permissions.
+ASEDEB.Debugger = dofile('Debugger.lua')
 
-    Debugger.init(ASEDEB_CONFIG.endpoint)
+if not ASEDEB.config.test_mode then
+    ASEDEB.Debugger.init(ASEDEB.config.endpoint)
 else
-    -- we want to run a different entry point if we are in test mode.
     dofile('tests/test_main.lua')
 end

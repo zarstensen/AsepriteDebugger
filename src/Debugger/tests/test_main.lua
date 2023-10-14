@@ -2,16 +2,14 @@
 --- Entry point for debugger extension in test configuration.
 --- 
 
+local json = ASEDEB.json
+
 --- Checks that the given condition is true, 
 --- and sends an assert json object back to the mock debug adapter with the passed message if not.
 ---
---- If the debug adapter is not accessible through the Debugger websocket (debugger has not been initialized or has closed),
---- it will instead be printed to console.
---- Therefore this should ideally be called after / during the Debugger.onConnect callback function.
----
 ---@param condition any
 ---@param message any
-function testAssert(condition, message)
+function ASEDEB.testAssert(condition, message)
     if condition then
         return;
     end
@@ -20,13 +18,29 @@ function testAssert(condition, message)
 
     local _, trace_message = xpcall(function() error(message) end, debug.traceback)
 
-    if Debugger and Debugger.ws then
-        Debugger.ws:sendText(json.encode({ type = "assert", message = trace_message }))
-    else
-        print(trace_message)
+    ASEDEB.test_ws:sendText(json.encode({ type = "assert", message = trace_message }))
+end
+
+--- Signal to the test runner that all test checks have finished and aseprite can be terminated.
+--- If this is not called at some point, the test is considered a failure.
+function ASEDEB.stopTest()
+    ASEDEB.test_ws:sendText(json.encode({ type = "test_end" }))
+end
+
+local function testWsOnReceive(message_type)
+    if message_type == WebSocketMessageType.OPEN then
+        -- we want to run the tests when we can communicate any failures to the test runner,
+        -- so we wait for an open message for the test websocket to ensure this.
+        local status, msg = xpcall(dofile, debug.traceback, ASEDEB.config.test_script)
+        ASEDEB.testAssert(status, msg)
     end
 end
 
--- wrap all test scripts in an xpcall, to capture any failures during test execution.
-local status, msg = xpcall(dofile, debug.traceback, ASEDEB.config.test_script)
-testAssert(status, msg)
+-- use this websocket to communicate failures and test ends.
+ASEDEB.test_ws = WebSocket{
+    url = ASEDEB.config.test_endpoint,
+    deflate = false,
+    onreceive = testWsOnReceive
+}
+
+ASEDEB.test_ws:connect()

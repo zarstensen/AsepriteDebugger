@@ -15,7 +15,6 @@ config_file:close()
 
 if ASEDEB.config.log_file then
     -- overload print function, as it otherwise prints to aseprites built in console.
-    print("BEFORE OUT")
     io.output(ASEDEB.config.log_file)
 
     function print(...)
@@ -28,8 +27,6 @@ if ASEDEB.config.log_file then
         io.flush()
 
     end
-
-    print("AFTER OUT")
 end
 
 -- load debugger package here, to make sure its source path matches up with the path used when giving script permissions.

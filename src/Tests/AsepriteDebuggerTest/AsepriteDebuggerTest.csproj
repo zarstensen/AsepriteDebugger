@@ -9,6 +9,7 @@
     <IsTestProject>true</IsTestProject>
     <AssemblyVersion>1.0.0.21888</AssemblyVersion>
     <BaseOutputPath></BaseOutputPath>
+    <FileVersion>1.0.0.36955</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -37,9 +38,5 @@
 		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </Content>
   </ItemGroup>
-
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Exec Command="(cp $(SolutionDir)src/Debugger/Debugger.lua $(TargetDir) &amp;&amp; mkdir $(TargetDir)json &amp;&amp; cp $(SolutionDir)src/Debugger/json/json.lua $(TargetDir)json/json.lua) || true" />
-  </Target>
 
 </Project>

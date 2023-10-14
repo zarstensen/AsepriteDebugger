@@ -27,6 +27,7 @@ namespace AsepriteDebuggerTest
         const string ENDPOINT = "http://127.0.0.1:8181";
         // endpoint route the websocket should connect to.
         const string DEBUGGER_ROUTE = "/ws";
+        const string TEST_ROUTE = "/test_ws";
         const string EXT_NAME = "!AsepriteDebugger";
 
         readonly ITestOutputHelper output;
@@ -130,14 +131,15 @@ namespace AsepriteDebuggerTest
         /// Test if the debugger responds correctly to an initialize request.
         /// </summary>
         [Fact]
-        public async Task InitializeTest() => await testAsepriteDebugger(timeout: 30, "initialize_test.lua", async ws =>
+        public async Task InitializeTest() => await testAsepriteDebugger(timeout: 10, "initialize_test.lua", async ws =>
         {
+            stage_msg = "Connected";
             JObject initialize_request = parseRequest("initialize_test/initialize_request.json");
 
             await sendWebsocketJson(ws, initialize_request);
 
             stage_msg = "Waiting for response";
-            JObject response = await recieveWebsocketJson(ws);
+            JObject response = await receiveWebsocketJson(ws);
 
             JObject expected_response = parseResponse("initialize_test/initialize_response.json", initialize_request, true);
 
@@ -146,7 +148,7 @@ namespace AsepriteDebuggerTest
             JObject expected_event = parseEvent("initialize_test/initialize_event.json");
 
             stage_msg = "Waiting for event";
-            wsAssertEq(expected_event, await recieveWebsocketJson(ws), "Event did not match expected event.", comparer: JToken.DeepEquals);
+            wsAssertEq(expected_event, await receiveWebsocketJson(ws), "Event did not match expected event.", comparer: JToken.DeepEquals);
         });
 
         #endregion
@@ -208,9 +210,31 @@ namespace AsepriteDebuggerTest
 
             mock_debug_adapter.MapGet("/", () => "Running");
 
+            // this route is used for validating test results from lua scripts.
+            mock_debug_adapter.Map(TEST_ROUTE, async context =>
+            {
+                using (WebSocket web_socket = await context.WebSockets.AcceptWebSocketAsync())
+                {
+                    JObject recv = new();
+
+                    while(true)
+                    {
+                        recv = await receiveWebsocketJson(web_socket);
+
+                        if (recv["type"]?.Value<string>() == "assert")
+                            wsAssert(false, recv["message"]?.Value<string>() ?? "");
+                        else if (recv["type"]?.Value<string>() == "test_end")
+                            break;
+                    }
+
+                    web_app_token.Cancel();
+                }
+            });
+
+            // this route is used for mocking a debug adapter for the debugger.
             mock_debug_adapter.Map(DEBUGGER_ROUTE, async context =>
             {
-                wsAssert(context.WebSockets.IsWebSocketRequest, "Incomming request was not a websocket.");
+                wsAssert(context.WebSockets.IsWebSocketRequest, "Incoming request was not a websocket.");
 
                 using (WebSocket web_socket = await context.WebSockets.AcceptWebSocketAsync())
                 {
@@ -218,12 +242,13 @@ namespace AsepriteDebuggerTest
                     {
                         await test_func(web_socket);
                     }
-                    catch (TaskCanceledException) { }
+                    catch (OperationCanceledException) { }
                     catch (Exception ex)
                     {
                         // if exception was caused by an wsAssert, we do not want to overwrite the assert message,
                         // so only do the assert if the websocket is not in a failed state.
-                        wsAssert(false, ex.ToString());
+                        if(!websocket_failed)
+                            wsAssert(false, ex.ToString());
                     }
 
                     web_app_token.Cancel();
@@ -262,7 +287,8 @@ namespace AsepriteDebuggerTest
 
             config["test_mode"] = true;
             config["endpoint"] = $"{ENDPOINT}{DEBUGGER_ROUTE}";
-            config["test_script"] = test_script;
+            config["test_endpoint"] = $"{ENDPOINT}{TEST_ROUTE}";
+            config["test_script"] = new FileInfo($"Debugger/tests/{test_script}").FullName;
             config["log_file"] = new FileInfo(script_log).FullName;
 
             File.WriteAllText(Path.Combine(dest_dir, "config.json"), config.ToString());
@@ -304,13 +330,13 @@ namespace AsepriteDebuggerTest
 
         /// <summary>
         /// 
-        /// Recieves and returns the next relevant json message recieved form the debugger.
+        /// Receives and returns the next relevant json message received form the debugger.
         /// 
         /// This function also handles debugger test assert failed messages sent from the debugger,
         /// and will forward them to the current test, by wsAsserting.
         /// 
         /// </summary>
-        private async Task<JObject> recieveWebsocketJson(WebSocket socket)
+        private async Task<JObject> receiveWebsocketJson(WebSocket socket, bool test_end = false)
         {
             byte[] buffer = new byte[256];
             StringBuilder response_builder = new();
@@ -322,12 +348,7 @@ namespace AsepriteDebuggerTest
                 response_builder.Append(Encoding.ASCII.GetString(buffer, 0, result.Count));
             } while (!result.EndOfMessage);
 
-            JObject json = JObject.Parse(response_builder.ToString());
-
-            if (json["type"]?.Value<string>() == "assert")
-                wsAssert(false, json["message"]?.Value<string>() ?? "Assertion failed in script");
-
-            return json;
+            return JObject.Parse(response_builder.ToString());
         }
 
         /// <summary>

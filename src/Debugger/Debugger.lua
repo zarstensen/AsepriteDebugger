@@ -80,8 +80,6 @@ function P.init(endpoint)
 
     P.ws:connect()
 
-    print(P.ws)
-
     P.handles[P.initialize] = true
 
 end
@@ -197,10 +195,16 @@ function P._onWebsocketRecieve(message_type, message)
 
     local result, msg = xpcall(fn, debug.traceback)
 
-    if not result then
-        print(msg)
-    end
+    -- we want to forward the failure to the test if in test mode,
+    -- as it cannot detect the error that otherwise would be raised.
 
+    if ASEDEB.config.test_mode then
+        ASEDEB.testAssert(false, msg)
+    end
+    
+    if not result then
+        error(msg)
+    end
 end
 
 return P

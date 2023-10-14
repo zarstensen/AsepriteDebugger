@@ -1,0 +1,23 @@
+{
+    "name": "aseprite-debugger",
+    "displayName": "Aseprite Debugger",
+    "description": "Debugger extension for aseprite",
+    "version": "0.0.0.0",
+    "autor": {
+        "name": "Zarstensen",
+        "url": "https://github.com/zarstensen/aseprite-debugger"
+    },
+    "contributors": [],
+    "publisher": "Zarstensen",
+    "license": "MIT",
+    "categoreis": [
+        "Scripts"
+    ],
+    "contributes": {
+        "scripts": [
+            {
+                "path": "main.lua"
+            }
+        ]
+    }
+}

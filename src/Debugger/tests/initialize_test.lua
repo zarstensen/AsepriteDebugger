@@ -1,6 +1,7 @@
-require 'Debugger'
+local Debugger = ASEDEB.Debugger
 
 Debugger.init()
+
 Debugger.onConnect(function()
     testAssert(debug.gethook(), "Debugger hook was not set!")
     testAssert(Debugger.handles[Debugger.initialize], "Initialize handle was not registered!")

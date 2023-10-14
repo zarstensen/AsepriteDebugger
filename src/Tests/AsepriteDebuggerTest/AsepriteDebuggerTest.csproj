@@ -7,13 +7,9 @@
 
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <AssemblyVersion>1.0.0.37922</AssemblyVersion>
+    <AssemblyVersion>1.0.0.21888</AssemblyVersion>
     <BaseOutputPath></BaseOutputPath>
   </PropertyGroup>
-
-  <ItemGroup>
-    <None Remove="script.lua" />
-  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.7.1" />
@@ -33,6 +29,13 @@
     <Compile Update="GlobalUsings.cs">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+	  <Content Include="..\..\Debugger\**\*.*">
+		  <Link>Debugger\%(RecursiveDir)%(Filename)%(Extension)</Link>
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
   </ItemGroup>
 
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">

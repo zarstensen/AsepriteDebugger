@@ -1,5 +1,4 @@
-print(debug.getinfo(1, "S").source)
-local Json = require "json.json"
+local json = ASEDEB.json
 
 ---@class Debugger
 ---@field handles table<fun(request: table, response: table, args: table), boolean>
@@ -14,22 +13,6 @@ if _REQUIREDNAME == nil then
     Debugger = P
 else
     _G[_REQUIREDNAME] = P
-end
-
--- overload print function, as it otherwise prints to aseprites built in console.
-if app.params and app.params.debug_log_file then
-    io.output(app.params.debug_log_file)
-    
-    function print(...)
-
-        for _, arg in pairs({...}) do
-            io.write(tostring(arg), "\t")
-        end
-
-        io.write('\n')
-        io.flush()
-
-    end
 end
 
 ---@class Response Class responsible for sending response messages to a specific request.
@@ -59,7 +42,7 @@ function Response:send(body)
         command = self.request.command,
     })
 
-    P.ws:sendText(Json.encode(response))
+    P.ws:sendText(json.encode(response))
 end
 
 --- Sends an error response to the connected debug adapter.
@@ -75,7 +58,7 @@ function Response:sendError(error_message, short_message)
         command = self.request.command,
     })
 
-    P.ws:sendText(Json.encode(response))
+    P.ws:sendText(json.encode(response))
 end
 
 --- Sets up the debug hook and connects to the debug adapter listening for websockets at the passed endpoint (or app.params.debugger_endpoint)
@@ -86,7 +69,7 @@ function P.init(endpoint)
     
     -- connect to debug adapter
     if app.params then
-        endpoint = endpoint or app.params.debugger_endpoint
+        endpoint = endpoint or ASEDEB.config.endpoint
     end
 
     P.ws = WebSocket{
@@ -103,6 +86,8 @@ function P.init(endpoint)
 
 end
 
+--- calls the callback function when the debugger has connected to a debug adapter.
+---@param callback fun(): nil
 function P.onConnect(callback)
     P._on_connect_callback = callback
 end
@@ -165,7 +150,7 @@ function P.event(event_type, body)
         body = body
     })
 
-    P.ws:sendText(Json.encode(event))
+    P.ws:sendText(json.encode(event))
 end
 
 --- Construct a new message of the specified type.
@@ -195,7 +180,7 @@ end
 
 function P._onWebsocketRecieve(message_type, message)
     -- as the websocket recieves happen on a different thread or something,
-    -- an xpcall will not capture any errors which happen in the following code.
+    -- the xpcall in the entry point will not capture any errors which happen in the following code.
     -- therefore we wrap the body of this function inside another function which we call in protected mode,
     -- to capture and print any errors.
     local function fn()
@@ -204,8 +189,9 @@ function P._onWebsocketRecieve(message_type, message)
         end
 
         if message_type == WebSocketMessageType.TEXT then
-            local message = Json.decode(message)
+            local message = json.decode(message)
             P.handleMessage(message)
+            -- TODO: handle callbacks
         end
     end
 

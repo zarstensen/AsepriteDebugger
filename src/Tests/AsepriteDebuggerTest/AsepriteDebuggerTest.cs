@@ -92,7 +92,14 @@ namespace AsepriteDebuggerTest
                     else
                         aseprite_proc?.CloseMainWindow();
 
-                    aseprite_proc?.WaitForExit();
+                    // give aseprite 1 second to shutdown, otherwise force it to shutdown.
+                    // this might happen if the test script has entered an indefinite loop.
+                    if (!aseprite_proc?.WaitForExit(1000) ?? false)
+                    {
+                        aseprite_proc?.Kill();
+                        // the log file is not instantly avaliable after a process kill, so have this sleep here to make sure it is.
+                        Thread.Sleep(1000);
+                    }
                 }
             } catch (InvalidOperationException) { }
 

@@ -9,7 +9,7 @@
     <IsTestProject>true</IsTestProject>
     <AssemblyVersion>1.0.0.21888</AssemblyVersion>
     <BaseOutputPath></BaseOutputPath>
-    <FileVersion>1.0.0.36955</FileVersion>
+    <FileVersion>1.0.0.14247</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

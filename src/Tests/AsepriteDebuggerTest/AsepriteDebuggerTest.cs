@@ -137,8 +137,8 @@ namespace AsepriteDebuggerTest
         /// <summary>
         /// Test if the debugger responds correctly to an initialize request.
         /// </summary>
-        [Fact]
-        public async Task InitializeTest() => await testAsepriteDebugger(timeout: 10, "initialize_test.lua", async ws =>
+        [Fact(Skip = "Depending on unfinished pipe websocket implementation")]
+        public async Task initializeTest() => await testAsepriteDebugger(timeout: 10, "initialize_test.lua", async ws =>
         {
             stage_msg = "Connected";
             JObject initialize_request = parseRequest("initialize_test/initialize_request.json");

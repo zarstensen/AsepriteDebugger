@@ -15,7 +15,7 @@ FROM dotnet-sdk AS test-build
 
     COPY /src/ /src/
 
-    WORKDIR /src/Tests/AsepriteDebuggerTest/
+    WORKDIR /src/Tests/TestRunner/
 
     RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
         dotnet build
@@ -121,7 +121,7 @@ FROM dotnet-sdk AS tests
     COPY --from=test-prepare ${ASEPRITE_USER_FOLDER} ${ASEPRITE_USER_FOLDER}
     COPY --from=test-build /src/ /src/
 
-    WORKDIR /src/Tests/AsepriteDebuggerTest/
+    WORKDIR /src/Tests/TestRunner/
 
     ENV ASEPRITE_USER_FOLDER ${ASEPRITE_USER_FOLDER}
     ENV ASEDEB_TEST_XVFB true

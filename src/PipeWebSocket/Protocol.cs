@@ -1,14 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.WebSockets;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace WSPipeServer
+namespace PipeWebSocket
 {
     /// <summary>
     /// 
-    /// Class containing helper functions and constants for receiving from and sending to streams.
+    /// Class containing helper functions and constants for receiving from and sending to streams and websockets.
     /// A protocol may send an exit signal to a receiving protocol, where both protocols will invoke the OnExit event,
     /// after the signal has been sent or received.
     /// 
@@ -30,69 +31,90 @@ namespace WSPipeServer
         public const string LEN_HEADER = "!<LEN>";
         public const string MSG_HEADER = "!<MSG>";
 
-        public static Action? OnExit;
 
         /// <summary>
-        /// 
-        /// Sends a protocol encoded string message to the stream, which can be read by Protocol.receive.
-        /// 
+        /// Send text message from the passed websocket client
         /// </summary>
-        public static void send(string msg, StreamWriter dest)
+        public static async Task sendWebsocket(string msg, ClientWebSocket ws, CancellationToken? token = null) =>
+            await ws.SendAsync(Encoding.UTF8.GetBytes(msg), WebSocketMessageType.Text, true, token ?? CancellationToken.None);
+
+        /// <summary>
+        /// Receive text message from the passed websocket.
+        /// </summary>
+        /// <returns> 
+        /// Received string, null if websocket conection was closed.
+        /// </returns>
+        public static async Task<string?> receiveWebsocket(WebSocket ws, CancellationToken? token = null)
         {
-            dest.Write(LEN_HEADER);
-            dest.Write(Encoding.UTF8.GetString(BitConverter.GetBytes(msg.Length)));
-            dest.Write(MSG_HEADER);
-            dest.Write(msg);
-            dest.Flush();
+            StringBuilder msg_builder = new();
+            WebSocketReceiveResult res;
+            byte[] buffer = new byte[256];
+
+            do
+            {
+                res = await ws.ReceiveAsync(buffer, token ?? CancellationToken.None);
+
+                if (res.MessageType == WebSocketMessageType.Close)
+                    return null;
+
+                msg_builder.Append(Encoding.UTF8.GetString(buffer, 0, res.Count));
+
+            } while (!res.EndOfMessage);
+            
+            return msg_builder.ToString();
         }
 
         /// <summary>
-        /// 
-        /// Receives and retreives the message payload from a protocol encoded message.
-        /// Returns null if the message is invalid, or an exit signal was received.
-        /// Also invokes OnExit if an exit signal was received.
-        /// 
+        /// Sends a protocol encoded string message to the stream, which can be read by Protocol.receive.
         /// </summary>
-        public static string? receive(StreamReader source)
+        public static async Task sendStream(string msg, StreamWriter dest)
         {
-            string? header = getHeader(source);
+            await dest.WriteAsync(LEN_HEADER);
+            await dest.WriteAsync(Encoding.UTF8.GetString(BitConverter.GetBytes(msg.Length)));
+            await dest.WriteAsync(MSG_HEADER);
+            await dest.WriteAsync(msg);
+            await dest.FlushAsync();
+        }
+
+        /// <summary>
+        /// Receives and retreives the message payload from a protocol encoded message.
+        /// Returns null if an exit signal was received.
+        /// </summary>
+        /// <exception cref="FormatException"> Thrown if received data is an invalid format. </exception>
+        public static async Task<string?> receiveStream(StreamReader source, CancellationToken token = default)
+        {
+            string? header = await getStreamHeader(source, token);
 
             if (header == EXIT_HEADER)
-            {
-                OnExit?.Invoke();
                 return null;
-            }
             else if (header != LEN_HEADER)
-                return null;
+                throw new FormatException($"First header must be '{EXIT_HEADER}' or '{LEN_HEADER}', was '{header}' instead");
 
             char[] msg_buffer = new char[4];
 
-            source.Read(msg_buffer, 0, msg_buffer.Length);
+            await source.ReadAsync(msg_buffer, 0, msg_buffer.Length);
 
             int msg_len = BitConverter.ToInt32(Array.ConvertAll(msg_buffer, c => (byte)c));
 
-            if (getHeader(source) != MSG_HEADER)
-                return null;
+            string? msg_header = await getStreamHeader(source, token);
+
+            if (msg_header != MSG_HEADER)
+                throw new FormatException($"Header following '{LEN_HEADER}' must be '{MSG_HEADER}', was '{msg_header}' instead");
 
             msg_buffer = new char[msg_len];
 
-            source.Read(msg_buffer, 0, msg_buffer.Length);
+            await source.ReadAsync(msg_buffer, 0, msg_buffer.Length);
 
             return new string(msg_buffer);
         }
 
         /// <summary>
-        /// 
         /// Send an exit message to the passed stream.
-        /// Invokes OnExit on the current Protocol, and on a receiving protocol.
-        /// 
         /// </summary>
-        /// <param name="dest"></param>
-        public static void exit(StreamWriter dest)
+        public static async Task exitStream(StreamWriter dest)
         {
-            dest.Write(EXIT_HEADER);
-            dest.Flush();
-            OnExit?.Invoke();
+            await dest.WriteAsync(EXIT_HEADER);
+            await dest.FlushAsync();
         }
 
         /// <summary>
@@ -103,27 +125,32 @@ namespace WSPipeServer
         /// 
         /// </summary>
         /// <param name="source"></param>
-        /// <returns></returns>
-        private static string? getHeader(StreamReader source)
+        private static async Task<string?> getStreamHeader(StreamReader source, CancellationToken token = default)
         {
             StringBuilder header_builder = new();
+            char[] buff = new char[1];
 
             for (int i = 0; i < 2; i++)
-                header_builder.Append((char)source.Read());
+            {
+                if (await source.ReadAsync(buff, token) == 0)
+                    return null;
+
+                header_builder.Append(buff[0]);
+            }
 
             if (header_builder.ToString() != "!<")
                 return null;
-
-            char c;
 
             do
             {
                 if (source.EndOfStream)
                     return null;
 
-                c = (char)source.Read();
-                header_builder.Append(c);
-            } while (c != '>');
+                if (await source.ReadAsync(buff, token) == 0)
+                    return null;
+
+                header_builder.Append(buff[0]);
+            } while (buff[0] != '>');
 
             return header_builder.ToString();
         }

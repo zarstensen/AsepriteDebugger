@@ -7,7 +7,7 @@
 
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <AssemblyVersion>1.0.0.28052</AssemblyVersion>
+    <AssemblyVersion>1.0.0.1861</AssemblyVersion>
     <BaseOutputPath></BaseOutputPath>
     <FileVersion>1.0.0.14247</FileVersion>
   </PropertyGroup>
@@ -40,7 +40,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\PipeWebSocket\WSPipeServer.csproj" />
+    <ProjectReference Include="..\..\PipeWebSocket\PipeWebSocket.csproj" />
   </ItemGroup>
 
 </Project>

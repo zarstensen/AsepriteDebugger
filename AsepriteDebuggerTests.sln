@@ -5,7 +5,7 @@ VisualStudioVersion = 17.7.34031.279
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PrepareAseprite", "src\Tests\PrepareAseprite\PrepareAseprite.csproj", "{6FC4A3F9-ACDD-4A5C-BFF4-CD7CB5104E81}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WSPipeServer", "src\PipeWebSocket\WSPipeServer.csproj", "{76B1967B-03CB-468C-B928-79E8556BCEAE}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PipeWebSocket", "src\PipeWebSocket\PipeWebSocket.csproj", "{76B1967B-03CB-468C-B928-79E8556BCEAE}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TestRunner", "src\Tests\TestRunner\TestRunner.csproj", "{4DDCA07A-9E63-44BE-8B71-13CBC932BE47}"
 EndProject

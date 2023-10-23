@@ -1,16 +1,11 @@
-using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json.Linq;
 using System.Diagnostics;
-using System.Net;
-using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using System.Text;
-using System.Threading;
 using Xunit.Abstractions;
-using static AsepriteDebuggerTest.AsepriteDebuggerTest;
 
-namespace AsepriteDebuggerTest
+namespace Debugger
 {
     /// <summary>
     /// 
@@ -22,7 +17,7 @@ namespace AsepriteDebuggerTest
     public class AsepriteDebuggerTest : IDisposable
     {
         delegate Task MockDebugAdapter(WebSocket socket);
-        
+
         // endpoint to listen for debugger websocket connections on.
         const string ENDPOINT = "http://127.0.0.1:8181";
         // endpoint route the websocket should connect to.
@@ -31,7 +26,7 @@ namespace AsepriteDebuggerTest
         const string EXT_NAME = "!AsepriteDebugger";
 
         readonly ITestOutputHelper output;
-        
+
 
         // process object for the aseprite process running the test script.
         // is automatically closed when a test ends or fails.
@@ -101,7 +96,8 @@ namespace AsepriteDebuggerTest
                         Thread.Sleep(1000);
                     }
                 }
-            } catch (InvalidOperationException) { }
+            }
+            catch (InvalidOperationException) { }
 
             // write script log
             if (File.Exists(script_log))
@@ -113,7 +109,7 @@ namespace AsepriteDebuggerTest
 
             // remove debugger from aseprite
 
-            if(Directory.Exists(Path.Combine(aseprite_config_dir, $"extensions/{EXT_NAME}")) && false)
+            if (Directory.Exists(Path.Combine(aseprite_config_dir, $"extensions/{EXT_NAME}")) && false)
                 Directory.Delete(Path.Combine(aseprite_config_dir, $"extensions/{EXT_NAME}"), true);
 
             // close mock debug adapter
@@ -198,7 +194,8 @@ namespace AsepriteDebuggerTest
                 HttpResponseMessage response = await client.GetAsync(ENDPOINT);
 
                 Assert.Fail($"Mock debug adapter was still running after timeout. ({timeout} s)\nStage:\t{stage_msg ?? "Unknown"}");
-            } catch(HttpRequestException) { }
+            }
+            catch (HttpRequestException) { }
 
             await run_task;
         }
@@ -224,7 +221,7 @@ namespace AsepriteDebuggerTest
                 {
                     JObject recv = new();
 
-                    while(true)
+                    while (true)
                     {
                         recv = await receiveWebsocketJson(web_socket);
 
@@ -254,7 +251,7 @@ namespace AsepriteDebuggerTest
                     {
                         // if exception was caused by an wsAssert, we do not want to overwrite the assert message,
                         // so only do the assert if the websocket is not in a failed state.
-                        if(!websocket_failed)
+                        if (!websocket_failed)
                             wsAssert(false, ex.ToString());
                     }
 
@@ -266,7 +263,7 @@ namespace AsepriteDebuggerTest
             await mock_debug_adapter.RunAsync(web_app_token.Token);
         }
 
-        
+
         /// <summary>
         /// Installs the debugger extension at ASEPRITE_USER_FOLDER, and configures it to run the passed test script in test mode.
         /// </summary>
@@ -279,7 +276,7 @@ namespace AsepriteDebuggerTest
             {
                 dest_dir.Create();
 
-                foreach(FileInfo file in src_dir.GetFiles())
+                foreach (FileInfo file in src_dir.GetFiles())
                     file.CopyTo(Path.Combine(dest_dir.FullName, file.Name), true);
 
                 foreach (DirectoryInfo sub_dir in src_dir.GetDirectories())
@@ -319,12 +316,14 @@ namespace AsepriteDebuggerTest
             aseprite_proc.StartInfo.UseShellExecute = false;
             aseprite_proc.StartInfo.WorkingDirectory = Directory.GetCurrentDirectory();
 
-            aseprite_proc.ErrorDataReceived += (s, e) => {
+            aseprite_proc.ErrorDataReceived += (s, e) =>
+            {
                 if (e.Data != null && e.Data != string.Empty)
                     output.WriteLine($"ASE ERR: {e.Data}");
             };
 
-            aseprite_proc.OutputDataReceived += (s, e) => {
+            aseprite_proc.OutputDataReceived += (s, e) =>
+            {
                 if (e.Data != null && e.Data != string.Empty)
                     output.WriteLine($"ASE OUT: {e.Data}");
             };
@@ -410,10 +409,10 @@ namespace AsepriteDebuggerTest
             debugger_seq = seq ?? debugger_seq;
 
             JObject response = new();
-            
+
             response["seq"] = debugger_seq++;
             response["type"] = "response";
-            
+
             response["request_seq"] = request["seq"]?.Value<int>();
             response["command"] = request["command"]?.Value<string>();
             response["success"] = success;
@@ -432,7 +431,7 @@ namespace AsepriteDebuggerTest
 
             event_obj["type"] = "event";
             event_obj["seq"] = debugger_seq++;
-            
+
             return event_obj;
         }
 
@@ -448,7 +447,7 @@ namespace AsepriteDebuggerTest
         /// <param name="message"/>
         private void wsAssert(bool condition, string message, [CallerLineNumber] int line_number = 0)
         {
-            if(!condition)
+            if (!condition)
             {
                 websocket_fail_message = $"Websocket Error:\n{message}\nLine: {line_number}";
                 websocket_failed = true;

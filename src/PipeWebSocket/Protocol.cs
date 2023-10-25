@@ -92,7 +92,8 @@ namespace PipeWebSocket
 
             char[] msg_buffer = new char[4];
 
-            await source.ReadAsync(msg_buffer, 0, msg_buffer.Length);
+            await source.ReadBlockAsync(msg_buffer, 0, msg_buffer.Length);
+
 
             int msg_len = BitConverter.ToInt32(Array.ConvertAll(msg_buffer, c => (byte)c));
 
@@ -103,7 +104,7 @@ namespace PipeWebSocket
 
             msg_buffer = new char[msg_len];
 
-            await source.ReadAsync(msg_buffer, 0, msg_buffer.Length);
+            await source.ReadBlockAsync(msg_buffer, 0, msg_buffer.Length);
 
             return new string(msg_buffer);
         }
@@ -132,7 +133,7 @@ namespace PipeWebSocket
 
             for (int i = 0; i < 2; i++)
             {
-                if (await source.ReadAsync(buff, token) == 0)
+                if (await source.ReadBlockAsync(buff, token) == 0)
                     return null;
 
                 header_builder.Append(buff[0]);
@@ -146,7 +147,7 @@ namespace PipeWebSocket
                 if (source.EndOfStream)
                     return null;
 
-                if (await source.ReadAsync(buff, token) == 0)
+                if (await source.ReadBlockAsync(buff, token) == 0)
                     return null;
 
                 header_builder.Append(buff[0]);

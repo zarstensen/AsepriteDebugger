@@ -1,4 +1,6 @@
-﻿using System.Text;
+﻿using System.Net;
+using System.Net.Sockets;
+using System.Text;
 using PipeWebSocket;
 
 namespace PipeWebSocket
@@ -31,6 +33,30 @@ namespace PipeWebSocket
             string invalid_msg_header = "!<LEN>\x07\x00\x00\x00<MSG>message";
 
             await Assert.ThrowsAsync<FormatException>(async () => await Protocol.receiveStream(stringStreamReader(invalid_msg_header)));
+        }
+
+        [Fact]
+        public async Task tcpClientMultiMessage()
+        {
+            TcpClient source = new();
+            TcpListener listener = new(IPAddress.Any, 0);
+
+            listener.Start();
+
+            Task connect_task = source.ConnectAsync(IPAddress.Loopback, (listener.LocalEndpoint as IPEndPoint).Port);
+            TcpClient dest = await listener.AcceptTcpClientAsync();
+            await connect_task;
+
+            await Protocol.sendStream("A", new(source.GetStream()));
+            await Protocol.sendStream("B", new(source.GetStream()));
+            await Protocol.sendStream("C", new(source.GetStream()));
+
+            // very important that it is the same StreamReader that is used every time, as it might skip messages otherwise.
+            StreamReader reader = new(dest.GetStream());
+            Assert.Equal("A", await Protocol.receiveStream(reader));
+            Assert.Equal("B", await Protocol.receiveStream(reader));
+            Assert.Equal("C", await Protocol.receiveStream(reader));
+
         }
 
         [Fact]

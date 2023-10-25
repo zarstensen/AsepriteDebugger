@@ -44,7 +44,7 @@ namespace TestRunner
         public void Dispose()
         {
             // force web application to shutdown, if it is currently up.
-            if(mock_websocket_server != null && m_run_task != null && !web_app_token.IsCancellationRequested)
+            if (mock_websocket_server != null && m_run_task != null && !web_app_token.IsCancellationRequested)
                 wsForceClose().Wait();
         }
 
@@ -59,6 +59,7 @@ namespace TestRunner
         {
             WebApplicationBuilder app_builder = WebApplication.CreateBuilder();
             app_builder.WebHost.UseUrls(endpoint.ToString());
+            app_builder.Configuration.AddJsonFile("WebSocketTesterSettings.json");
 
             mock_websocket_server = app_builder.Build();
             mock_websocket_server.UseWebSockets();
@@ -208,7 +209,7 @@ namespace TestRunner
         /// <param name="expected"></param>
         /// <param name="actual"></param>
         /// <param name="message"></param>
-        public void wsAssertEq<T>(T expected, T? actual, string message, EqualFunc<T>? comparer = null, [CallerLineNumber] int line_number = 0)
+        public void wsAssertEq<T>(T expected, T? actual, string message = "", EqualFunc<T>? comparer = null, [CallerLineNumber] int line_number = 0)
         {
             comparer ??= EqualityComparer<T>.Default.Equals;
             wsAssert(comparer(expected, actual), $"{message}\nExpected:\t{expected}\nActual:\t{actual}", line_number);

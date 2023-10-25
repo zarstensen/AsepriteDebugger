@@ -31,7 +31,7 @@ namespace PipeWebSocket
         /// <param name="output_stream"> stdout by default. </param>
         public PipeWebSocketServer(IPAddress? address = null, int port = 0, Stream? output_stream = null)
         {
-            m_out_stream = output_stream ?? Console.OpenStandardOutput();
+            m_out_stream_writer = new StreamWriter(output_stream ?? Console.OpenStandardOutput());
             m_server = new(address ?? IPAddress.Any, port);
         }
         
@@ -54,13 +54,16 @@ namespace PipeWebSocket
         /// Task finishes when an exit message is received from the PipeWebSocketClient, or the websocket is forcefully closed.
         /// </summary>
         public async Task forwardMessages() =>
-            await Task.WhenAll(pipeForward(), websocketForward());
+            await Task.WhenAll(Task.Run(pipeForward), Task.Run(websocketForward));
 
         /// <summary>
         /// Accept PipeWebSocketClient
         /// </summary>
-        public async Task acceptPipeWebScoketClient() =>
+        public async Task acceptPipeWebScoketClient()
+        {
             m_client = await m_server.AcceptTcpClientAsync();
+            m_in_stream_reader = new StreamReader(m_client!.GetStream());
+        }
 
         /// <summary>
         /// Connect to the websocket at the passed endpoint.
@@ -70,10 +73,11 @@ namespace PipeWebSocket
             await m_ws_client.ConnectAsync(endpoint, CancellationToken.None);
 
         private TcpListener m_server;
-        private TcpClient? m_client = null;
+        private TcpClient? m_client;
         private ClientWebSocket m_ws_client = new();
 
-        private Stream m_out_stream;
+        private StreamWriter m_out_stream_writer;
+        private StreamReader? m_in_stream_reader;
 
         private CancellationTokenSource m_pipe_token = new();
 
@@ -82,9 +86,12 @@ namespace PipeWebSocket
         /// </summary>
         private async Task pipeForward()
         {
+            if (m_in_stream_reader == null)
+                throw new InvalidOperationException("A TcpClient must be connected to the server.");
+
             while (true)
             {
-                string? msg = await Protocol.receiveStream(new(m_client!.GetStream()), m_pipe_token.Token);
+                string? msg = await Protocol.receiveStream(m_in_stream_reader, m_pipe_token.Token);
 
                 // exit signal was received
                 if (msg == null)
@@ -94,7 +101,7 @@ namespace PipeWebSocket
             }
 
             // make sure websocketForward also exits when an exit signal has been received.
-            await m_ws_client.CloseAsync(WebSocketCloseStatus.NormalClosure, null, default);
+            await m_ws_client.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, default);
         }
 
         /// <summary>
@@ -102,7 +109,10 @@ namespace PipeWebSocket
         /// </summary>
         private async Task websocketForward()
         {
-            while(m_ws_client.State != WebSocketState.Closed)
+            if(m_ws_client.State != WebSocketState.Open)
+                throw new InvalidOperationException("ClientWebSocket must be connected to a websocket endpoint.");
+
+            while (m_ws_client.State != WebSocketState.Closed)
             {
                 StringBuilder msg = new();
                 WebSocketReceiveResult res;
@@ -117,7 +127,7 @@ namespace PipeWebSocket
                 if (res.MessageType == WebSocketMessageType.Close)
                     break;
 
-                await Protocol.sendStream(msg.ToString(), new(m_out_stream));
+                await Protocol.sendStream(msg.ToString(), m_out_stream_writer);
             }
 
             // stop any potentially blocking stream reads from continuing in the pipe forward task,

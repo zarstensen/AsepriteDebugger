@@ -39,27 +39,28 @@ namespace PipeWebSocket
                     "/ws",
                     async ws =>
                     {
-                        string res = await Protocol.receiveWebsocket(ws);
-                        Assert.Equal("message", res);
                         received = true;
 
+                        string? res = await Protocol.receiveWebsocket(ws);
+                        wsAssertEq("message", res);
+
                         // exit message should come here
-                        Assert.Null(await Protocol.receiveWebsocket(ws));
+                        string? received_msg = await Protocol.receiveWebsocket(ws);
+                        wsAssertEq(null, received_msg, "OMG IT WAS NULL");
                     }
                 }
             });
             wsRun();
             await server.connectWebsocket(new(SERVER_ENDPOINT.ToString().Replace("http", "ws") + "ws"));
 
-            // actually send messages
-            Task forward_task = server.forwardMessages();
-
             await Protocol.sendStream("message", new(socket_client.GetStream()));
             await Protocol.exitStream(new(socket_client.GetStream()));
-            
-            await wsWaitForClose(TIMEOUT);
 
-            await wsTimeoutTask(forward_task, TIMEOUT);
+            await Task.WhenAll(
+                wsWaitForClose(TIMEOUT),
+                wsTimeoutTask(server.forwardMessages(), TIMEOUT)
+                );
+
             server.stop();
 
             // make sure message was actually passed to the websocket.
@@ -84,7 +85,7 @@ namespace PipeWebSocket
                     async ws =>
                     {
                         await ws.SendAsync(Encoding.UTF8.GetBytes("message"), WebSocketMessageType.Text, true, web_app_token.Token);
-                        Assert.Null(await Protocol.receiveWebsocket(ws));
+                        wsAssertEq(null, await Protocol.receiveWebsocket(ws));
                     }
                 }
             });
@@ -93,20 +94,28 @@ namespace PipeWebSocket
 
             Task forward_task = server.forwardMessages();
 
-            // wait for output stream to be populated.
+            // wait for m_output stream to be populated.
             // this should not be a problem with stdin, as read calls are blocking if the stream is empty,
             // and its position is also at the unread data, instead of the end of stdin.
-            while(out_stream.Length <= 0) { await Task.Delay(25); }
+            while(out_stream.Length <= 0)
+            {
+                await Task.Delay(25);
+                wsFailCheck();
+            }
+
             out_stream.Position = 0;
 
             Assert.Equal("message", await Protocol.receiveStream(new(out_stream)));
             await Protocol.exitStream(new(socket_client.GetStream()));
 
-            await wsWaitForClose(TIMEOUT);
+            await Task.WhenAll(
+                wsWaitForClose(TIMEOUT), 
+                wsTimeoutTask(forward_task, TIMEOUT)
+                );
 
-            await wsTimeoutTask(forward_task, TIMEOUT);
             server.stop();
         }
+
 
         [Fact]
         public async Task serverForceClose()
@@ -119,7 +128,8 @@ namespace PipeWebSocket
 
             await wsTimeoutTask(
                 Task.WhenAll(server.acceptPipeWebScoketClient(), socket_client.ConnectAsync(IPAddress.Loopback, server.Port)),
-                TIMEOUT);
+                TIMEOUT
+                );
 
             wsCreate(SERVER_ENDPOINT, new() {
                 {
@@ -132,11 +142,11 @@ namespace PipeWebSocket
             await server.connectWebsocket(new(SERVER_ENDPOINT.ToString().Replace("http", "ws") + "ws"));
 
             // actually send messages
-            Task forward_task = server.forwardMessages();
+            await Task.WhenAll(
+                wsWaitForClose(TIMEOUT),
+                wsTimeoutTask(Assert.ThrowsAsync<OperationCanceledException>(server.forwardMessages), TIMEOUT)
+                );
 
-            await wsWaitForClose(TIMEOUT);
-
-            await wsTimeoutTask(Assert.ThrowsAsync<OperationCanceledException>(() => forward_task), TIMEOUT);
             server.stop();
         }
     }

@@ -45,8 +45,7 @@ namespace PipeWebSocket
                         wsAssertEq("message", res);
 
                         // exit message should come here
-                        string? received_msg = await Protocol.receiveWebsocket(ws);
-                        wsAssertEq(null, received_msg, "OMG IT WAS NULL");
+                        wsAssertEq(null, await Protocol.receiveWebsocket(ws));
                     }
                 }
             });

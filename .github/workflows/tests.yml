@@ -2,7 +2,8 @@ name: Aseprite Debugger Tests
 
 on:
     push: {}
-
+    workflow_dispatch: {}
+    
 jobs:
     test_debugger:
         name: Test Debugger

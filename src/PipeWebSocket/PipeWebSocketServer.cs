@@ -1,12 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
-using System.Runtime.ExceptionServices;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace PipeWebSocket
 {
@@ -53,7 +48,7 @@ namespace PipeWebSocket
         /// 
         /// Task finishes when an exit message is received from the PipeWebSocketClient, or the websocket is forcefully closed.
         /// </summary>
-        public async Task forwardMessages() =>
+        public async Task pipeData() =>
             await Task.WhenAll(Task.Run(pipeForward), Task.Run(websocketForward));
 
         /// <summary>
@@ -100,6 +95,7 @@ namespace PipeWebSocket
                 await m_ws_client.SendAsync(Encoding.UTF8.GetBytes(msg), WebSocketMessageType.Text, true, m_pipe_token.Token);
             }
 
+            await Protocol.exitStream(m_out_stream_writer);
             // make sure websocketForward also exits when an exit signal has been received.
             await m_ws_client.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, default);
         }

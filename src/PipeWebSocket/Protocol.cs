@@ -1,9 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.WebSockets;
+﻿using System.Net.WebSockets;
 using System.Text;
-using System.Threading.Tasks;
+using System.Threading.Channels;
 
 namespace PipeWebSocket
 {
@@ -91,9 +88,17 @@ namespace PipeWebSocket
                 throw new FormatException($"First header must be '{EXIT_HEADER}' or '{LEN_HEADER}', was '{header}' instead");
 
             char[] msg_buffer = new char[4];
+            int? read_res;
 
-            await source.ReadBlockAsync(msg_buffer, 0, msg_buffer.Length);
+            read_res = await readBlockAsyncCancel(source, msg_buffer, token);
 
+            switch(read_res)
+            {
+                case null:
+                    throw new OperationCanceledException();
+                case 0:
+                    throw new ChannelClosedException("Source stream was closed mid receive.");
+            }
 
             int msg_len = BitConverter.ToInt32(Array.ConvertAll(msg_buffer, c => (byte)c));
 
@@ -104,7 +109,15 @@ namespace PipeWebSocket
 
             msg_buffer = new char[msg_len];
 
-            await source.ReadBlockAsync(msg_buffer, 0, msg_buffer.Length);
+            read_res = await readBlockAsyncCancel(source, msg_buffer, token);
+
+            switch (read_res)
+            {
+                case null:
+                    throw new OperationCanceledException();
+                case 0:
+                    throw new ChannelClosedException("Source stream was closed mid receive.");
+            }
 
             return new string(msg_buffer);
         }
@@ -133,7 +146,7 @@ namespace PipeWebSocket
 
             for (int i = 0; i < 2; i++)
             {
-                if (await source.ReadBlockAsync(buff, token) == 0)
+                if ((await readBlockAsyncCancel(source, buff, token) ?? 0) == 0)
                     return null;
 
                 header_builder.Append(buff[0]);
@@ -147,13 +160,41 @@ namespace PipeWebSocket
                 if (source.EndOfStream)
                     return null;
 
-                if (await source.ReadBlockAsync(buff, token) == 0)
+                if ((await readBlockAsyncCancel(source, buff, token) ?? 0) == 0)
                     return null;
 
                 header_builder.Append(buff[0]);
             } while (buff[0] != '>');
 
             return header_builder.ToString();
+        }
+
+        /// <summary>
+        /// 
+        /// Reads data from reader into buffer, using ReadBlockAsync, and guarantees a successfull cancel, no matter the stream source.
+        /// 
+        /// So this can be used to read from stdin and canceling the read, which is not possible using just ReadBlockAsync and a token.
+        /// However, this does just leave the read task running in the background, so the program should exit soon after a cancel,
+        /// in order to completely cleanup the console read task.
+        /// 
+        /// </summary>
+        /// <returns> ReadBlockAsync result, null if cancelled. </returns>
+        private static async Task<int?> readBlockAsyncCancel(StreamReader reader, Memory<char> buffer, CancellationToken token = default)
+        {
+            CancellationTokenSource cancel_task_token = new();
+
+            Task<int> read_task = reader.ReadBlockAsync(buffer, token).AsTask();
+            
+            Task cancel_task = Task.Run(token.WaitHandle.WaitOne, cancel_task_token.Token);
+
+            Task finished_task = await Task.WhenAny(read_task, cancel_task);
+
+            if (finished_task == cancel_task)
+                return null;
+
+            cancel_task_token.Cancel();
+
+            return read_task.Result;
         }
     }
 }

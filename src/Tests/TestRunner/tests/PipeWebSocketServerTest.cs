@@ -1,5 +1,4 @@
-﻿using PipeWebSocket;
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
@@ -23,10 +22,11 @@ namespace PipeWebSocket
         public async Task socketToWebsocket()
         {
             bool received = false;
+            MemoryStream out_stream = new();
 
             // setup connections.
             TcpClient socket_client = new();
-            PipeWebSocketServer server = new();
+            PipeWebSocketServer server = new(output_stream: out_stream);
 
             server.start();
             
@@ -57,13 +57,20 @@ namespace PipeWebSocket
 
             await Task.WhenAll(
                 wsWaitForClose(TIMEOUT),
-                wsTimeoutTask(server.forwardMessages(), TIMEOUT)
+                wsTimeoutTask(server.pipeData(), TIMEOUT)
                 );
 
             server.stop();
 
-            // make sure message was actually passed to the websocket.
             Assert.True(received);
+
+            out_stream.Position = 0;
+
+            Task<string?> receive_exit_task = Protocol.receiveStream(new(out_stream));
+
+            await wsTimeoutTask(receive_exit_task, TIMEOUT);
+
+            Assert.Null(receive_exit_task.Result);
         }
 
         [Fact]
@@ -91,9 +98,9 @@ namespace PipeWebSocket
             wsRun();
             await server.connectWebsocket(new(SERVER_ENDPOINT.ToString().Replace("http", "ws") + "ws"));
 
-            Task forward_task = server.forwardMessages();
+            Task forward_task = server.pipeData();
 
-            // wait for m_output stream to be populated.
+            // wait for output stream to be populated.
             // this should not be a problem with stdin, as read calls are blocking if the stream is empty,
             // and its position is also at the unread data, instead of the end of stdin.
             while(out_stream.Length <= 0)
@@ -143,7 +150,7 @@ namespace PipeWebSocket
             // actually send messages
             await Task.WhenAll(
                 wsWaitForClose(TIMEOUT),
-                wsTimeoutTask(Assert.ThrowsAsync<OperationCanceledException>(server.forwardMessages), TIMEOUT)
+                wsTimeoutTask(Assert.ThrowsAsync<OperationCanceledException>(server.pipeData), TIMEOUT)
                 );
 
             server.stop();

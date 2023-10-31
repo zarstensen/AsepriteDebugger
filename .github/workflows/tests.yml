@@ -2,7 +2,8 @@ name: Aseprite Debugger Tests
 
 on:
     push: {}
-
+    workflow_dispatch: {}
+    
 jobs:
     test_debugger:
         name: Test Debugger
@@ -29,4 +30,5 @@ jobs:
             # we are now later, which means we need to use docker run, instead of docker compose run, since we did not use docker compose build before.
             - name: Run tests
               id: test_run
+              timeout-minutes: 10
               run: docker run --rm tests

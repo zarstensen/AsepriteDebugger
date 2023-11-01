@@ -4,3 +4,6 @@
 [submodule "modules/websocketpp"]
 	path = modules/websocketpp
 	url = https://github.com/zaphoyd/websocketpp
+[submodule "modules/lua"]
+	path = modules/lua
+	url = https://github.com/lua/lua.git

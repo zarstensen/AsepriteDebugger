@@ -33,7 +33,7 @@ namespace PipeWebSocket
         /// Send text message from the passed websocket client
         /// </summary>
         public static async Task sendWebsocket(string msg, ClientWebSocket ws, CancellationToken? token = null) =>
-            await ws.SendAsync(Encoding.UTF8.GetBytes(msg), WebSocketMessageType.Text, true, token ?? CancellationToken.None);
+            await ws.SendAsync(Encoding.ASCII.GetBytes(msg), WebSocketMessageType.Text, true, token ?? CancellationToken.None);
 
         /// <summary>
         /// Receive text message from the passed websocket.
@@ -54,7 +54,7 @@ namespace PipeWebSocket
                 if (res.MessageType == WebSocketMessageType.Close)
                     return null;
 
-                msg_builder.Append(Encoding.UTF8.GetString(buffer, 0, res.Count));
+                msg_builder.Append(Encoding.ASCII.GetString(buffer, 0, res.Count));
 
             } while (!res.EndOfMessage);
             
@@ -67,10 +67,13 @@ namespace PipeWebSocket
         public static async Task sendStream(string msg, StreamWriter dest)
         {
             await dest.WriteAsync(LEN_HEADER);
-            await dest.WriteAsync(Encoding.UTF8.GetString(BitConverter.GetBytes(msg.Length)));
+            await dest.WriteAsync(Encoding.ASCII.GetString(BitConverter.GetBytes(msg.Length)));
             await dest.WriteAsync(MSG_HEADER);
             await dest.WriteAsync(msg);
             await dest.FlushAsync();
+
+            File.AppendAllText("C:\\Users\\Karsten\\Downloads\\SENDS.txt",
+                $"{LEN_HEADER}{Encoding.UTF8.GetString(BitConverter.GetBytes(msg.Length))}{MSG_HEADER}{msg}\n");
         }
 
         /// <summary>

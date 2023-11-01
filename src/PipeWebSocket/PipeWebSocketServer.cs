@@ -123,6 +123,7 @@ namespace PipeWebSocket
                 if (res.MessageType == WebSocketMessageType.Close)
                     break;
 
+                File.AppendAllText("C:\\Users\\Karsten\\Downloads\\LATEST_MESSAGE.txt", msg.ToString());
                 await Protocol.sendStream(msg.ToString(), m_out_stream_writer);
             }
 

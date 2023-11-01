@@ -1,3 +1,6 @@
 [submodule "src/Debugger/json"]
 	path = src/Debugger/json
 	url = https://github.com/rxi/json.lua
+[submodule "modules/websocketpp"]
+	path = modules/websocketpp
+	url = https://github.com/zaphoyd/websocketpp

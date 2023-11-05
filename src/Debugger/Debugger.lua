@@ -1,3 +1,6 @@
+require '../LuaWebSocket'
+require 'JsonWS'
+
 ---@class Debugger
 ---@field handles table<fun(request: table, response: table, args: table), boolean>
 local P = {
@@ -40,7 +43,7 @@ function Response:send(body)
         command = self.request.command,
     })
 
-    P.pipe_ws:sendJson(response)
+    JsonWS.sendJson(P.pipe_ws, response)
 end
 
 --- Sends an error response to the connected debug adapter.
@@ -56,7 +59,7 @@ function Response:sendError(error_message, short_message)
         command = self.request.command,
     })
 
-    P.pipe_ws:sendJson(response)
+    JsonWS.sendJson(P.pipe_ws, response)
 end
 
 --- Sets up the debug hook and connects to the debug adapter listening for websockets at the passed endpoint (or app.params.debugger_endpoint)
@@ -68,8 +71,8 @@ function P.init(endpoint)
         endpoint = endpoint or ASEDEB.config.endpoint
     end
 
-    P.pipe_ws = PipeWebSocket.new(ASEDEB.config.pipe_ws_path)
-    P.pipe_ws:connect("127.0.0.1", endpoint)
+    P.pipe_ws = LuaWebSocket()
+    P.pipe_ws:connect(endpoint)
 
     P.handles[P.initialize] = true
 
@@ -77,9 +80,7 @@ function P.init(endpoint)
     debug.sethook(P._debugHook, "clr")
 
     print("Begin initialize message loop")
-    while true do
-        P.handleMessage(P.pipe_ws:receiveJson())
-    end
+    P.handleMessage(JsonWS.receiveJson(P.pipe_ws))
 end
 
 --- calls the callback function when the debugger has connected to a debug adapter.
@@ -129,6 +130,10 @@ function P.handleMessage(message)
     
     local response = Response.new(message)
 
+    if not message then
+        response.sendError("Nil Message", "Received nil message")
+    end
+
     if message.type ~= "request" or not P.handles[P[message.command]] then
         response:sendError("Not Implemented", string.format("The %s request is not implemented in the debugger.", message.command))
         return
@@ -146,7 +151,7 @@ function P.event(event_type, body)
         body = body
     })
 
-    P.pipe_ws:sendJson(event)
+    JsonWS.sendJson(P.pipe_ws, event)
 end
 
 --- Construct a new message of the specified type.

@@ -1,4 +1,4 @@
-local Debugger = ASEDEB.Debugger
+require 'Debugger'
 
 print("before init")
 
@@ -9,4 +9,5 @@ print("after init")
 ASEDEB.testAssert(debug.gethook() == Debugger._debugHook, "Debugger hook was not set!")
 ASEDEB.testAssert(Debugger.handles[Debugger.initialize], "Initialize handle was not registered!")
 ASEDEB.stopTest()
+print("Finished tests")
 

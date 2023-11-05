@@ -19,9 +19,10 @@
 **/*.dbmdl
 **/*.jfm
 **/bin
+**/build
 **/charts
 **/docker-compose*
-**/compose*
+**/compose.yaml
 **/Dockerfile*
 **/node_modules
 **/npm-debug.log

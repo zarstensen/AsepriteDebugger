@@ -1,7 +1,7 @@
 #include "LUAWS.h"
 #include "WebSocket.h"
 
-#include <format>
+#include <sstream>
 
 extern "C"
 {
@@ -19,12 +19,15 @@ void hasArgTypes(lua_State* L, std::vector<int> arg_types)
 
 	if (arg_count != arg_types.size())
 	{
-		std::string err_msg = std::format("Invalid number of arguments passed to method.\nexpected '{}' was '{}'",
-			arg_types.size(),
-			arg_count
-		);
+		std::stringstream err_msg;
 
-		lua_pushstring(L, err_msg.c_str());
+		err_msg << "Invalid number of arguments passed to method.\nexpected '"
+			<< arg_types.size()
+			<< "' was '"
+			<< arg_count
+			<< "'";
+
+		lua_pushstring(L, err_msg.str().c_str());
 		lua_error(L);
 	}
 
@@ -33,13 +36,17 @@ void hasArgTypes(lua_State* L, std::vector<int> arg_types)
 		int arg_type = lua_type(L, i + 1);
 		if (arg_type != arg_types[i])
 		{
-			std::string err_msg = std::format("Invalid argument type for argument '{}'.\nexpected '{}' was '{}'",
-				i + 1,
-				lua_typename(L, arg_types[i]),
-				lua_typename(L, arg_type)
-			);
+			std::stringstream err_msg;
 
-			lua_pushstring(L, err_msg.c_str());
+			err_msg << "Invalid argument type for argument '"
+				<< i + 1
+				<< ".\nexpected '"
+				<< lua_typename(L, arg_types[i])
+				<< "' was '"
+				<< lua_typename(L, arg_type)
+				<< "'";
+
+			lua_pushstring(L, err_msg.str().c_str());
 			lua_error(L);
 		}
 	}

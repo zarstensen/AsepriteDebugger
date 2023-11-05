@@ -90,8 +90,6 @@ namespace TestRunner
 
                         await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, web_app_token.Token);
                     }
-
-                    web_app_token.Cancel();
                 });
             }
 

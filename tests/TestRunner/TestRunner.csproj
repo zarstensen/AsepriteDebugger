@@ -7,7 +7,7 @@
 
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <AssemblyVersion>1.0.0.35467</AssemblyVersion>
+    <AssemblyVersion>1.0.0.1076</AssemblyVersion>
     <BaseOutputPath></BaseOutputPath>
     <FileVersion>1.0.0.14247</FileVersion>
   </PropertyGroup>
@@ -33,14 +33,10 @@
   </ItemGroup>
 
   <ItemGroup>
-	  <Content Include="..\..\Debugger\**\*.*">
+	  <Content Include="..\..\src\Debugger\**\*.*">
 		  <Link>Debugger\%(RecursiveDir)%(Filename)%(Extension)</Link>
 		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </Content>
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\PipeWebSocket\PipeWebSocket.csproj" />
   </ItemGroup>
 
 </Project>

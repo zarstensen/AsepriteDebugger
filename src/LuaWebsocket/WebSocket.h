@@ -4,6 +4,7 @@
 
 #include <string_view>
 #include <queue>
+#include <optional>
 
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_no_tls_client.hpp>

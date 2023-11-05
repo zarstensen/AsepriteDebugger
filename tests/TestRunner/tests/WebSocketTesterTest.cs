@@ -1,5 +1,4 @@
-﻿using PipeWebSocket;
-using System.Net.WebSockets;
+﻿using System.Net.WebSockets;
 using TestRunner;
 using Xunit.Abstractions;
 
@@ -13,7 +12,7 @@ namespace TestHelpers
     [Collection("Websockets")]
     public class WebSocketTesterTest : WebSocketTester
     {
-        string endpoint = "127.0.0.1";
+        string endpoint = "127.0.0.1:8181";
 
         public WebSocketTesterTest(ITestOutputHelper output) : base(output) { }
 
@@ -29,6 +28,9 @@ namespace TestHelpers
                     {
                         received = true;
                         wsAssert(true, "Should not fail");
+
+                        // close web app
+                        web_app_token.Cancel();
                     }
                 }
             });
@@ -55,6 +57,8 @@ namespace TestHelpers
                     {
                         received = true;
                         wsAssert(false, "Should fail");
+
+                        web_app_token.Cancel();
                     }
                 }
             });

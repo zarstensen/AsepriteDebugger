@@ -34,13 +34,13 @@ TEST_CASE("LuaWebSocket.WebSocket.SendMessage")
 
 	server.init_asio();
 
-	server.listen(9002);
+	server.listen(8180);
 	server.start_accept();
 
 	std::thread server_thread = std::thread(&Server::run, &server);
 
 	WebSocket socket;
-	socket.connect("ws://localhost:9002");
+	socket.connect("ws://localhost:8180");
 
 	REQUIRE(opened_connection);
 
@@ -75,13 +75,13 @@ TEST_CASE("LuaWebSocket.WebSocket.ReceiveMessage")
 
 	server.init_asio();
 
-	server.listen(9002);
+	server.listen(8181);
 	server.start_accept();
 
 	std::thread server_thread = std::thread(&Server::run, &server);
 
 	WebSocket socket;
-	socket.connect("ws://localhost:9002");
+	socket.connect("ws://localhost:8181");
 
 	REQUIRE(opened_connection);
 

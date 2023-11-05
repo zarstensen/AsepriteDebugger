@@ -2,12 +2,40 @@
 --- Entry point for debugger extension.
 ---
 
+
 -- global aseprite debugger namespace.
 ASEDEB = {}
+ASEDEB.json = require 'json.json'
 
 ASEDEB.ext_path = app.fs.joinPath(app.fs.userConfigPath, "extensions/!AsepriteDebugger")
 
-ASEDEB.json = dofile(app.fs.joinPath(ASEDEB.ext_path, 'json/json.lua'))
+table.insert(package.searchers, function(module)
+
+    local new_module = module:match(".+/(.+)")
+
+    if not new_module then
+        return nil
+    end
+
+    for _, searcher in ipairs(package.searchers) do
+        local res = searcher(new_module)
+
+        if type(res) == 'function' then
+            return res
+        end
+    end
+
+    return nil
+end)
+
+-- determine shared library extension by examining existing values in the cpath and using their extensions.
+local shared_lib_ext = package.cpath:match("%p[\\|/]?%p(%a+)")
+
+package.cpath = package.cpath .. ";" .. ASEDEB.ext_path .. "/?." .. shared_lib_ext
+
+print("before require")
+require 'LuaWebSocket'
+print("after require")
 
 -- configuration file should store the debug adapter endpoint, the debugger log file, and optionally test mode and test script.
 -- can be accessed through all scripts with the ASEDEB_CONFIG global.
@@ -33,14 +61,9 @@ if ASEDEB.config.log_file then
     end
 end
 
--- load packagea here, to make sure their source path matches up with the path used when giving script permissions.
--- order is important here as some files depend on each other.
-ASEDEB.Protocol = dofile(app.fs.joinPath(ASEDEB.ext_path, 'Protocol.lua'))
-ASEDEB.PipeWebSocket = dofile(app.fs.joinPath(ASEDEB.ext_path, 'PipeWebSocket.lua'))
-ASEDEB.Debugger = dofile(app.fs.joinPath(ASEDEB.ext_path, 'Debugger.lua'))
-
 if not ASEDEB.config.test_mode then
-    ASEDEB.Debugger.init(ASEDEB.config.endpoint)
+    require 'Debugger'
+    Debugger.init(ASEDEB.config.endpoint)
 else
     dofile('tests/test_main.lua')
 end

@@ -2,6 +2,8 @@
 --- Entry point for debugger extension in test configuration.
 --- 
 
+require 'JsonWS'
+
 --- Checks that the given condition is true, 
 --- and sends an assert json object back to the mock debug adapter with the passed message if not.
 ---
@@ -16,18 +18,25 @@ function ASEDEB.testAssert(condition, message)
 
     local _, trace_message = xpcall(function() error(message) end, debug.traceback)
 
-    ASEDEB.test_pipe_ws:sendJson({ type = "assert", message = trace_message })
+    print(trace_message)
+
+    JsonWS.sendJson(ASEDEB.test_pipe_ws, { type = "assert", message = trace_message })
 end
 
 --- Signal to the test runner that all test checks have finished and aseprite can be terminated.
 --- If this is not called at some point, the test is considered a failure.
 function ASEDEB.stopTest()
-    ASEDEB.test_pipe_ws:sendJson({ type = "test_end" })
+    JsonWS.sendJson(ASEDEB.test_pipe_ws, { type = "test_end" })
 end
 
 
 -- use this pipe websocket to communicate failures and test ends.
-ASEDEB.test_pipe_ws = PipeWebSocket.new(ASEDEB.config.pipe_ws_path)
-ASEDEB.test_pipe_ws:connect("127.0.0.1", ASEDEB.config.test_endpoint)
+print("CON")
+ASEDEB.test_pipe_ws = LuaWebSocket()
+print("CONNECT")
+ASEDEB.test_pipe_ws:connect(ASEDEB.config.test_endpoint)
+print("ENDCON")
 
-dofile(ASEDEB.config.test_script)
+local res, msg = xpcall(function() dofile(ASEDEB.config.test_script) end, debug.traceback)
+
+ASEDEB.testAssert(res, msg)

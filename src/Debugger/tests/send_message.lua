@@ -1,11 +1,17 @@
-local PipeWebSocket = ASEDEB.PipeWebSocket
+require '../LuaWebSocket'
+require 'JsonWS'
 
-local pipe_ws = PipeWebSocket.new(ASEDEB.config.pipe_ws_path)
-pipe_ws:connect("127.0.0.1", ASEDEB.config.endpoint)
+print("OMG")
 
-local msg = pipe_ws:receiveJson()
+local ws = LuaWebSocket()
+ws:connect(ASEDEB.config.endpoint)
+
+local msg = JsonWS.receiveJson(ws)
 
 ASEDEB.testAssert(
     msg.type == "test_message",
     "Received invalid message."
 )
+
+ws:close()
+ASEDEB.stopTest()

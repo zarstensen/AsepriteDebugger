@@ -1,0 +1,7 @@
+# aseprite does not link lua with 'dl' on linux, which is required for loading dlls, so we do it here manually.
+
+# allow adding of link targets to projects not build by current dir.
+cmake_policy(SET CMP0079 NEW)
+add_subdirectory(aseprite)
+target_link_libraries(lualib PUBLIC ${CMAKE_DL_LIBS})
+target_compile_definitions(lualib PUBLIC LUA_USE_LINUX)

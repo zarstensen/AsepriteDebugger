@@ -1,16 +1,15 @@
-using Microsoft.Extensions.Hosting;
+using Microsoft.AspNetCore.DataProtection;
 using Newtonsoft.Json.Linq;
+using System;
 using System.Diagnostics;
-using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using System.Text;
-using System.Threading;
+using TestRunner;
 using Xunit.Abstractions;
-using static AsepriteDebuggerTest.AsepriteDebuggerTest;
 
-namespace AsepriteDebuggerTest
+namespace Debugger
 {
     /// <summary>
     /// 
@@ -19,26 +18,23 @@ namespace AsepriteDebuggerTest
     /// Each test should run the testAsepriteDebugger method, where the parameters passed to the method, defines the logic of the test.
     /// 
     /// </summary>
-    public class AsepriteDebuggerTest : IDisposable
+    [Collection("Websockets")]
+    public class AsepriteDebuggerTest : WebSocketTester, IDisposable
     {
         delegate Task MockDebugAdapter(WebSocket socket);
-        
+
         // endpoint to listen for debugger websocket connections on.
-        const string ENDPOINT = "http://127.0.0.1:8181";
+        const string ENDPOINT = "ws://127.0.0.1:8181";
         // endpoint route the websocket should connect to.
         const string DEBUGGER_ROUTE = "/ws";
         const string TEST_ROUTE = "/test_ws";
         const string EXT_NAME = "!AsepriteDebugger";
 
-        readonly ITestOutputHelper output;
-        
+
 
         // process object for the aseprite process running the test script.
         // is automatically closed when a test ends or fails.
         Process? aseprite_proc = null;
-        WebApplication? mock_debug_adapter = null;
-        // token used to stop the mock_debug_adapter web application, when a test finishes or fails.
-        CancellationTokenSource web_app_token = new();
 
         // whether to use xvfb-run to run aseprite, or just run aseprite directly.
         // maps to ASEDEB_TEST_XVFB environment variable if set. 
@@ -50,23 +46,15 @@ namespace AsepriteDebuggerTest
         // maps ASEPRITE_USER_FOLDER, all tests fail if this variable is not set.
         readonly string aseprite_config_dir;
 
-        // whether the websocket has failed a test.
-        bool websocket_failed = false;
-        // error message of a failed websocket.
-        string? websocket_fail_message = null;
-
         // seq value to expect from the next debugger response or event, increments automatically.
         int debugger_seq = 1;
         // seq value to use for the next mock request, increments automatically.
         int client_seq = 1;
 
-        // brief message describing the current stage of the test.
-        // will be printed in case of timeout, to clarify where exactly the test was stopped
-        string? stage_msg = null;
 
         public AsepriteDebuggerTest(ITestOutputHelper output)
+            :base(output)
         {
-            this.output = output;
             use_xvfb = (Environment.GetEnvironmentVariable("ASEDEB_TEST_XVFB")?.ToLower() ?? "false") == "true";
             script_log = Environment.GetEnvironmentVariable("ASEDEB_SCRIPT_LOG") ?? script_log;
 
@@ -80,7 +68,7 @@ namespace AsepriteDebuggerTest
         /// <summary>
         /// Close any open processes, and writes the script log to output.
         /// </summary>
-        public void Dispose()
+        public new void Dispose()
         {
             // close aseprite
             try
@@ -101,7 +89,8 @@ namespace AsepriteDebuggerTest
                         Thread.Sleep(1000);
                     }
                 }
-            } catch (InvalidOperationException) { }
+            }
+            catch (InvalidOperationException) { }
 
             // write script log
             if (File.Exists(script_log))
@@ -113,48 +102,73 @@ namespace AsepriteDebuggerTest
 
             // remove debugger from aseprite
 
-            if(Directory.Exists(Path.Combine(aseprite_config_dir, $"extensions/{EXT_NAME}")) && false)
+            if (Directory.Exists(Path.Combine(aseprite_config_dir, $"extensions/{EXT_NAME}")) && false)
                 Directory.Delete(Path.Combine(aseprite_config_dir, $"extensions/{EXT_NAME}"), true);
 
-            // close mock debug adapter
-            try
-            {
-                HttpClient client = new();
-                HttpResponseMessage response = client.GetAsync(ENDPOINT).Result;
-
-                web_app_token.Cancel();
-                mock_debug_adapter?.WaitForShutdown();
-            }
-            catch (AggregateException e)
-            {
-                if (e.InnerException?.GetType() != typeof(HttpRequestException))
-                    throw;
-            }
+            base.Dispose();
         }
 
         #region tests
 
         /// <summary>
+        /// Test if LuaWebSocket send is working properly.
+        /// Note: if LuaWebSocket is not working, the lua test wont be able to communicate with the test runner,
+        /// so error messages might be a bit wired, but this should catch this sort of failure non the less.
+        /// </summary>
+        [Fact]
+        public async Task sendWebSocketMessage() => await testAsepriteDebugger(timeout: 3, "send_message.lua", async ws =>
+        {
+            server_state = "Sending";
+
+            await ws.SendAsync(
+                Encoding.ASCII.GetBytes(File.ReadAllText("json/message_test/send_message.json")),
+                WebSocketMessageType.Text,
+                true,
+                web_app_token.Token);
+
+            server_state = "Waiting for close";
+            Assert.Equal(WebSocketMessageType.Close, (await ws.ReceiveAsync(new byte[0], web_app_token.Token)).MessageType);
+        });
+
+        /// <summary>
+        /// Test if LuaWebSocket receive is working properly
+        /// </summary>
+        /// <returns></returns>
+        [Fact]
+        public async Task receiveWebSocketMessage() => await testAsepriteDebugger(timeout: 3, "receive_message.lua", async ws =>
+        {
+            server_state = "Receiving";
+
+            JObject recv = await receiveWebsocketJson(ws);
+
+            wsAssertEq("test_message", recv["type"]);
+
+            server_state = "Waiting for close";
+            Assert.Equal(WebSocketMessageType.Close, (await ws.ReceiveAsync(new byte[0], web_app_token.Token)).MessageType);
+        });
+
+        /// <summary>
         /// Test if the debugger responds correctly to an initialize request.
         /// </summary>
         [Fact]
-        public async Task InitializeTest() => await testAsepriteDebugger(timeout: 10, "initialize_test.lua", async ws =>
+        public async Task initializeDebugger() => await testAsepriteDebugger(timeout: 10, "initialize_test.lua", async ws =>
         {
-            stage_msg = "Connected";
+            server_state = "Connected";
             JObject initialize_request = parseRequest("initialize_test/initialize_request.json");
 
             await sendWebsocketJson(ws, initialize_request);
 
-            stage_msg = "Waiting for response";
+            server_state = "Waiting for response";
             JObject response = await receiveWebsocketJson(ws);
 
+            server_state = "Received response";
             JObject expected_response = parseResponse("initialize_test/initialize_response.json", initialize_request, true);
 
             wsAssertEq(expected_response, response, "Response did not match expected response.", comparer: JToken.DeepEquals);
 
             JObject expected_event = parseEvent("initialize_test/initialize_event.json");
 
-            stage_msg = "Waiting for event";
+            server_state = "Waiting for event";
             wsAssertEq(expected_event, await receiveWebsocketJson(ws), "Event did not match expected event.", comparer: JToken.DeepEquals);
         });
 
@@ -178,7 +192,7 @@ namespace AsepriteDebuggerTest
         {
             Assert.True(File.Exists(Path.Join("Debugger/tests", test_script)), $"Could not find test script: {Path.Join("Debugger/tests", test_script)}");
 
-            Task run_task = runMockDebugAdapter(test_func);
+            runMockDebugAdapter(test_func);
 
             installDebugger(test_script);
 
@@ -186,87 +200,61 @@ namespace AsepriteDebuggerTest
 
             Assert.False(aseprite_proc.HasExited, $"Aseprite exited with code {(aseprite_proc.HasExited ? aseprite_proc.ExitCode : null)}");
 
-            mock_debug_adapter.WaitForShutdownAsync().Wait((int)(timeout * 1000));
-
-            Assert.False(websocket_failed, websocket_fail_message);
-
-            // check if web application is still running.
-
-            try
-            {
-                HttpClient client = new();
-                HttpResponseMessage response = await client.GetAsync(ENDPOINT);
-
-                Assert.Fail($"Mock debug adapter was still running after timeout. ({timeout} s)\nStage:\t{stage_msg ?? "Unknown"}");
-            } catch(HttpRequestException) { }
-
-            await run_task;
+            await wsWaitForClose(timeout);    
         }
 
         /// <summary>
         /// Starts a web application which listens for a websocket and redirects it to the passed test function.
         /// </summary>
         /// <param name="test_func"></param>
-        private async Task runMockDebugAdapter(MockDebugAdapter test_func)
+        private void runMockDebugAdapter(MockDebugAdapter test_func)
         {
-            WebApplicationBuilder app_builder = WebApplication.CreateBuilder();
-            app_builder.WebHost.UseUrls(ENDPOINT);
+            // the web application should only stop when both the test websocket and debugger websocket have exited,
+            // as they might end up stopping the web app too early.
+            bool should_stop = false;
 
-            mock_debug_adapter = app_builder.Build();
-            mock_debug_adapter.UseWebSockets();
-
-            mock_debug_adapter.MapGet("/", () => "Running");
-
-            // this route is used for validating test results from lua scripts.
-            mock_debug_adapter.Map(TEST_ROUTE, async context =>
-            {
-                using (WebSocket web_socket = await context.WebSockets.AcceptWebSocketAsync())
+            wsCreate(new(ENDPOINT.Replace("ws", "http")), new() {
                 {
-                    JObject recv = new();
-
-                    while(true)
+                    TEST_ROUTE,
+                    async ws =>
                     {
-                        recv = await receiveWebsocketJson(web_socket);
+                        JObject recv = await receiveWebsocketJson(ws);
 
-                        if (recv["type"]?.Value<string>() == "assert")
-                            wsAssert(false, recv["message"]?.Value<string>() ?? "");
-                        else if (recv["type"]?.Value<string>() == "test_end")
-                            break;
+                        while(true)
+                            if (recv["type"]?.Value<string>() == "assert")
+                            {
+                                wsAssert(false, recv["message"]?.Value<string>() ?? "");
+                                break;
+                            }
+                            else if (recv["type"]?.Value<string>() == "test_end")
+                            {
+                                if(should_stop)
+                                    web_app_token.Cancel();
+
+                                should_stop = true;
+
+                                break;
+                            }
                     }
+                },
+                {
+                    DEBUGGER_ROUTE,
+                    async ws =>
+                    {
+                        await test_func(ws);
+                        
+                        if(should_stop)
+                            web_app_token.Cancel();
 
-                    web_app_token.Cancel();
+                        should_stop = true;
+                    }
                 }
             });
 
-            // this route is used for mocking a debug adapter for the debugger.
-            mock_debug_adapter.Map(DEBUGGER_ROUTE, async context =>
-            {
-                wsAssert(context.WebSockets.IsWebSocketRequest, "Incoming request was not a websocket.");
-
-                using (WebSocket web_socket = await context.WebSockets.AcceptWebSocketAsync())
-                {
-                    try
-                    {
-                        await test_func(web_socket);
-                    }
-                    catch (OperationCanceledException) { }
-                    catch (Exception ex)
-                    {
-                        // if exception was caused by an wsAssert, we do not want to overwrite the assert message,
-                        // so only do the assert if the websocket is not in a failed state.
-                        if(!websocket_failed)
-                            wsAssert(false, ex.ToString());
-                    }
-
-                    web_app_token.Cancel();
-                }
-            });
-
-            output.WriteLine($"Running websocket at {ENDPOINT}{DEBUGGER_ROUTE}");
-            await mock_debug_adapter.RunAsync(web_app_token.Token);
+            wsRun();
         }
 
-        
+
         /// <summary>
         /// Installs the debugger extension at ASEPRITE_USER_FOLDER, and configures it to run the passed test script in test mode.
         /// </summary>
@@ -279,7 +267,7 @@ namespace AsepriteDebuggerTest
             {
                 dest_dir.Create();
 
-                foreach(FileInfo file in src_dir.GetFiles())
+                foreach (FileInfo file in src_dir.GetFiles())
                     file.CopyTo(Path.Combine(dest_dir.FullName, file.Name), true);
 
                 foreach (DirectoryInfo sub_dir in src_dir.GetDirectories())
@@ -297,6 +285,7 @@ namespace AsepriteDebuggerTest
             config["test_endpoint"] = $"{ENDPOINT}{TEST_ROUTE}";
             config["test_script"] = new FileInfo($"Debugger/tests/{test_script}").FullName;
             config["log_file"] = new FileInfo(script_log).FullName;
+            config["pipe_ws_path"] = new FileInfo("PipeWebSocket.exe").FullName;
 
             File.WriteAllText(Path.Combine(dest_dir, "config.json"), config.ToString());
         }
@@ -312,19 +301,21 @@ namespace AsepriteDebuggerTest
             aseprite_proc = new Process();
 
             aseprite_proc.StartInfo.FileName = use_xvfb ? "xvfb-run" : "aseprite";
-            aseprite_proc.StartInfo.Arguments = use_xvfb ? "aseprite" : "";
+            aseprite_proc.StartInfo.Arguments = use_xvfb ? "-e /dev/stdout -a aseprite" : "";
             aseprite_proc.StartInfo.RedirectStandardOutput = true;
             aseprite_proc.StartInfo.RedirectStandardError = true;
             aseprite_proc.StartInfo.RedirectStandardInput = true;
             aseprite_proc.StartInfo.UseShellExecute = false;
             aseprite_proc.StartInfo.WorkingDirectory = Directory.GetCurrentDirectory();
 
-            aseprite_proc.ErrorDataReceived += (s, e) => {
+            aseprite_proc.ErrorDataReceived += (s, e) =>
+            {
                 if (e.Data != null && e.Data != string.Empty)
                     output.WriteLine($"ASE ERR: {e.Data}");
             };
 
-            aseprite_proc.OutputDataReceived += (s, e) => {
+            aseprite_proc.OutputDataReceived += (s, e) =>
+            {
                 if (e.Data != null && e.Data != string.Empty)
                     output.WriteLine($"ASE OUT: {e.Data}");
             };
@@ -336,14 +327,9 @@ namespace AsepriteDebuggerTest
         }
 
         /// <summary>
-        /// 
         /// Receives and returns the next relevant json message received form the debugger.
-        /// 
-        /// This function also handles debugger test assert failed messages sent from the debugger,
-        /// and will forward them to the current test, by wsAsserting.
-        /// 
         /// </summary>
-        private async Task<JObject> receiveWebsocketJson(WebSocket socket, bool test_end = false)
+        private async Task<JObject> receiveWebsocketJson(WebSocket socket)
         {
             byte[] buffer = new byte[256];
             StringBuilder response_builder = new();
@@ -363,7 +349,6 @@ namespace AsepriteDebuggerTest
         /// </summary>
         private async Task sendWebsocketJson(WebSocket socket, JObject json) =>
             await socket.SendAsync(Encoding.ASCII.GetBytes(json.ToString()), WebSocketMessageType.Text, true, web_app_token.Token);
-
 
         /// <summary>
         /// 
@@ -410,10 +395,10 @@ namespace AsepriteDebuggerTest
             debugger_seq = seq ?? debugger_seq;
 
             JObject response = new();
-            
+
             response["seq"] = debugger_seq++;
             response["type"] = "response";
-            
+
             response["request_seq"] = request["seq"]?.Value<int>();
             response["command"] = request["command"]?.Value<string>();
             response["success"] = success;
@@ -432,48 +417,10 @@ namespace AsepriteDebuggerTest
 
             event_obj["type"] = "event";
             event_obj["seq"] = debugger_seq++;
-            
+
             return event_obj;
         }
 
-        #region asserts
-
-        /// <summary>
-        /// Simple assert method to be used inside the websocket handler.
-        /// 
-        /// as Assert functions do not work in a separate thread, we need to check if the websocket has failed in the test thread,
-        /// which we do by setting a flag in the websocket thread if it fails, and checking this flag when testing has finished, in the test thread.
-        /// </summary>
-        /// <param name="condition"/>
-        /// <param name="message"/>
-        private void wsAssert(bool condition, string message, [CallerLineNumber] int line_number = 0)
-        {
-            if(!condition)
-            {
-                websocket_fail_message = $"Websocket Error:\n{message}\nLine: {line_number}";
-                websocket_failed = true;
-                web_app_token.Cancel();
-            }
-        }
-
-        delegate bool EqualFunc<T>(T? a, T? b);
-
-        /// <summary>
-        /// 
-        /// Fails if expected and actual are not equal, and states their values in the error message.
-        /// 
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="expected"></param>
-        /// <param name="actual"></param>
-        /// <param name="message"></param>
-        private void wsAssertEq<T>(T expected, T? actual, string message, EqualFunc<T>? comparer = null, [CallerLineNumber] int line_number = 0)
-        {
-            comparer ??= EqualityComparer<T>.Default.Equals;
-            wsAssert(comparer(expected, actual), $"{message}\nExpected:\t{expected}\nActual:\t{actual}", line_number);
-        }
-
-        #endregion
         #endregion
     }
 

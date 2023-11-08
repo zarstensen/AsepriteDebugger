@@ -28,13 +28,21 @@ table.insert(package.searchers, function(module)
     return nil
 end)
 
+
 -- package.cpath seems to be preserved between aseprite runs, so we want to make sure to remove the custom search path.
 -- this also prevents this workaround from affecting other scripts and extensions.
 local tmp_cpath = package.cpath
 
 -- currently only windows allows loading of shared libraries,
 -- so there is no reason to modify the shared library extension depending on platform
-package.cpath = tmp_cpath .. ";" .. ASEDEB.ext_path .. "/?.dll"
+-- test mode is an exception for this though.
+
+local shared_lib_ext = "dll"
+
+if ASEDEB.config.test_mode then
+    shared_lib_ext = package.cpath:match("%p[\\|/]?%p(%a+)")
+end
+package.cpath = tmp_cpath .. ";" .. ASEDEB.ext_path .. "/?." .. shared_lib_ext
 
 print("before require")
 require 'LuaWebSocket'

@@ -29,6 +29,8 @@ install(TARGETS ${PROJECT_NAME} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/install
 # LuaWebSocket tests
 
 if(${BUILD_TESTING})
+    include(CTest)
+
     find_package(OpenSSL REQUIRED)
 
     add_executable(LuaWebSocketTests

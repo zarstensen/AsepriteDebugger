@@ -59,7 +59,13 @@ add_library(lua::lua ALIAS lua)
 
 # Cathc2 library
 
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/Catch2/extras)
-include(Catch REQUIRED)
+if(${CMAKE_PROJECT_NAME} STREQUAL ${PROJECT_NAME})
+    include(CTest)
 
-add_subdirectory(Catch2)
+    if(${BUILD_TESTING})
+        list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/Catch2/extras)
+        include(Catch REQUIRED)
+
+        add_subdirectory(Catch2)
+    endif()
+endif()

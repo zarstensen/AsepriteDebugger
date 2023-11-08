@@ -28,18 +28,14 @@ install(TARGETS ${PROJECT_NAME} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/install
 
 # LuaWebSocket tests
 
-if(${CMAKE_PROJECT_NAME} STREQUAL ${PROJECT_NAME})
-    include(CTest)
+if(${BUILD_TESTING})
+    find_package(OpenSSL REQUIRED)
 
-    if(${BUILD_TESTING})
-        find_package(OpenSSL REQUIRED)
-
-        add_executable(LuaWebSocketTests
-            tests/LuaWebSocketTests/test.cpp
-        )
-        
-        target_link_libraries(LuaWebSocketTests PRIVATE OpenSSL::SSL LuaWebSocket Catch2::Catch2WithMain)
-        
-        catch_discover_tests(LuaWebSocketTests)
-    endif()
+    add_executable(LuaWebSocketTests
+        tests/LuaWebSocketTests/test.cpp
+    )
+    
+    target_link_libraries(LuaWebSocketTests PRIVATE OpenSSL::SSL LuaWebSocket Catch2::Catch2WithMain)
+    
+    catch_discover_tests(LuaWebSocketTests)
 endif()

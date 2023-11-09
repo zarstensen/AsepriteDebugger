@@ -33,20 +33,16 @@ end)
 -- this also prevents this workaround from affecting other scripts and extensions.
 local tmp_cpath = package.cpath
 
--- currently only windows allows loading of shared libraries,
--- so there is no reason to modify the shared library extension depending on platform
--- test mode is an exception for this though.
+-- use the loadall library extension as the shared library extension for the current platform.
+local shared_lib_ext = package.cpath:match(".+loadall%p(%a+)")
 
-local shared_lib_ext = "dll"
-
-if ASEDEB.config.test_mode then
-    shared_lib_ext = package.cpath:match("%p[\\|/]?%p(%a+)")
-end
 package.cpath = tmp_cpath .. ";" .. ASEDEB.ext_path .. "/?." .. shared_lib_ext
 
 print("before require")
 require 'LuaWebSocket'
 print("after require")
+
+print(package.cpath)
 
 package.cpath = tmp_cpath
 

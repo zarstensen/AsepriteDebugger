@@ -28,14 +28,23 @@ table.insert(package.searchers, function(module)
     return nil
 end)
 
--- determine shared library extension by examining existing values in the cpath and using their extensions.
-local shared_lib_ext = package.cpath:match("%p[\\|/]?%p(%a+)")
 
-package.cpath = package.cpath .. ";" .. ASEDEB.ext_path .. "/?." .. shared_lib_ext
+-- package.cpath seems to be preserved between aseprite runs, so we want to make sure to remove the custom search path.
+-- this also prevents this workaround from affecting other scripts and extensions.
+local tmp_cpath = package.cpath
+
+-- use the loadall library extension as the shared library extension for the current platform.
+local shared_lib_ext = package.cpath:match(".+loadall%p(%a+)")
+
+package.cpath = tmp_cpath .. ";" .. ASEDEB.ext_path .. "/?." .. shared_lib_ext
 
 print("before require")
 require 'LuaWebSocket'
 print("after require")
+
+print(package.cpath)
+
+package.cpath = tmp_cpath
 
 -- configuration file should store the debug adapter endpoint, the debugger log file, and optionally test mode and test script.
 -- can be accessed through all scripts with the ASEDEB_CONFIG global.

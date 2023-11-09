@@ -1,4 +1,3 @@
-require '../LuaWebSocket'
 require 'JsonWS'
 
 local ws = LuaWebSocket()

@@ -1,4 +1,3 @@
-require '../LuaWebSocket'
 require 'JsonWS'
 
 ---@class Debugger

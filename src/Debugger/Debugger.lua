@@ -35,12 +35,14 @@ end
 --- Construct and send a successfull response table, containing the passed body, to the connected debug adapter.
 ---@param body table
 function Response:send(body)
-    local response = P.newMsg('response', {
+    local response = {
+        type = 'response',
+        seq = 0,
         success = true,
         body = body,
         request_seq = self.request.seq,
         command = self.request.command,
-    })
+    }
 
     JsonWS.sendJson(P.pipe_ws, response)
 end
@@ -145,32 +147,16 @@ end
 ---@param event_type string
 ---@param body table | nil
 function P.event(event_type, body)
-    local event = P.newMsg('event', {
+    local event = {
+        type = 'event',
+        seq = P._curr_seq,
         event = event_type,
         body = body
-    })
-
-    JsonWS.sendJson(P.pipe_ws, event)
-end
-
---- Construct a new message of the specified type.
---- Auto increments the seq field.
----@param type string
----@param body table
----@return table
-function P.newMsg(type, body)
-    local msg = {
-        type = type,
-        seq = P._curr_seq
     }
 
     P._curr_seq = P._curr_seq + 1
 
-    for k, v in pairs(body) do
-        msg[k] = v
-    end
-
-    return msg
+    JsonWS.sendJson(P.pipe_ws, event)
 end
 
 -- debug specific

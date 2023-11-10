@@ -38,11 +38,7 @@ local shared_lib_ext = package.cpath:match(".+loadall%p(%a+)")
 
 package.cpath = tmp_cpath .. ";" .. ASEDEB.ext_path .. "/?." .. shared_lib_ext
 
-print("before require")
 require 'LuaWebSocket'
-print("after require")
-
-print(package.cpath)
 
 package.cpath = tmp_cpath
 

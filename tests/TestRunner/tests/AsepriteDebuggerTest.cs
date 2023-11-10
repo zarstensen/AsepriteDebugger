@@ -6,6 +6,7 @@ using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Xml;
 using TestRunner;
 using Xunit.Abstractions;
 
@@ -147,6 +148,28 @@ namespace Debugger
             Assert.Equal(WebSocketMessageType.Close, (await ws.ReceiveAsync(new byte[0], web_app_token.Token)).MessageType);
         });
 
+        [Fact]
+        public async Task logMessageToClient() => await testAsepriteDebugger(timeout: 3, "log_message.lua", no_websocket_logging: false, test_func: async ws =>
+        {
+            server_state = "Connected";
+
+            int n_receive = 1;
+
+            while(!web_app_token.IsCancellationRequested)
+            {
+                server_state = $"Receive [{n_receive++}]";
+                // other log events might come here aswell, so we just ignore those and block until we get the correct message.
+                JObject log_event = await receiveWebsocketJson(ws);
+
+                if(log_event.GetValue("event")?.ToString() == "output"
+                    && (log_event.GetValue("body") as JObject)?.GetValue("output")?.ToString() == "!<TEST LOG MESSAGE>!\t")
+                {
+                    break;
+                }
+            }
+
+        });
+
         /// <summary>
         /// Test if the debugger responds correctly to an initialize request.
         /// </summary>
@@ -159,7 +182,13 @@ namespace Debugger
             await sendWebsocketJson(ws, initialize_request);
 
             server_state = "Waiting for response";
-            JObject response = await receiveWebsocketJson(ws);
+
+            JObject response;
+
+            do
+            {
+                response = await receiveWebsocketJson(ws);
+            } while (response.GetValue("type")?.ToString() != "response");
 
             server_state = "Received response";
             JObject expected_response = parseResponse("initialize_test/initialize_response.json", initialize_request, true);
@@ -188,13 +217,13 @@ namespace Debugger
         /// <param name="test_script"> lua script to run when starting aseprite. </param>
         /// <param name="timeout"> how long before test auto fails. </param>
         /// <param name="test_func"> c# function to run, when a websocket has connected to the mock debug adapter. </param>
-        private async Task testAsepriteDebugger(double timeout, string test_script, MockDebugAdapter test_func)
+        private async Task testAsepriteDebugger(double timeout, string test_script, MockDebugAdapter test_func, bool no_websocket_logging = true)
         {
             Assert.True(File.Exists(Path.Join("Debugger/tests", test_script)), $"Could not find test script: {Path.Join("Debugger/tests", test_script)}");
 
             runMockDebugAdapter(test_func);
 
-            installDebugger(test_script);
+            installDebugger(test_script, no_websocket_logging);
 
             runAseprite();
 
@@ -259,7 +288,7 @@ namespace Debugger
         /// Installs the debugger extension at ASEPRITE_USER_FOLDER, and configures it to run the passed test script in test mode.
         /// </summary>
         /// <param name="test_script"></param>
-        private void installDebugger(string test_script)
+        private void installDebugger(string test_script, bool websocket_logging)
         {
             // copy to extension directory.
 
@@ -281,6 +310,7 @@ namespace Debugger
             JObject config = new();
 
             config["test_mode"] = true;
+            config["no_websocket_logging"] = websocket_logging;
             config["endpoint"] = $"{ENDPOINT}{DEBUGGER_ROUTE}";
             config["test_endpoint"] = $"{ENDPOINT}{TEST_ROUTE}";
             config["test_script"] = new FileInfo($"Debugger/tests/{test_script}").FullName;

@@ -2,6 +2,7 @@ require 'Debugger'
 
 print("before init")
 
+Debugger.connect(ASEDEB.config.endpoint)
 Debugger.init()
 
 print("after init")

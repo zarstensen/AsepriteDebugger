@@ -65,7 +65,7 @@ end
 
 --- Sets up the debug hook and connects to the debug adapter listening for websockets at the passed endpoint (or app.params.debugger_endpoint)
 ---@param endpoint string | nil app.params.debugger_endpoint if nil (passed as --script-param debugger_endpoint=<ENDPOINT>).
-function P.init(endpoint)
+function P.connect(endpoint)
     
     -- connect to debug adapter
     if app.params then
@@ -79,15 +79,16 @@ function P.init(endpoint)
 
     -- setup lua debugger
     debug.sethook(P._debugHook, "clr")
-
-    print("Begin initialize message loop")
-    P.handleMessage(JsonWS.receiveJson(P.pipe_ws))
 end
 
---- calls the callback function when the debugger has connected to a debug adapter.
----@param callback fun(): nil
-function P.onConnect(callback)
-    P._on_connect_callback = callback
+function P.connected()
+    return P.pipe_ws ~= nil and P.pipe_ws:isConnected()
+end
+
+--- Begin initialize process with debug adapter.
+function P.init()
+    print("Begin initialize message loop")
+    P.handleMessage(JsonWS.receiveJson(P.pipe_ws))
 end
 
 --- Stop debugging and disconnect from the debug adapter.
@@ -157,6 +158,12 @@ function P.event(event_type, body)
     P._curr_seq = P._curr_seq + 1
 
     JsonWS.sendJson(P.pipe_ws, event)
+end
+
+---comment
+---@param msg string
+function P.log(msg)
+    P.event('output', { output = msg, category = 'console' })
 end
 
 -- debug specific

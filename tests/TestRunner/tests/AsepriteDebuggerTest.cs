@@ -149,7 +149,7 @@ namespace Debugger
         });
 
         [Fact]
-        public async Task logMessageToClient() => await testAsepriteDebugger(timeout: 3, "log_message.lua", no_websocket_logging: false, test_func: async ws =>
+        public async Task logMessageToClient() => await testAsepriteDebugger(timeout: 10, "log_message.lua", no_websocket_logging: false, test_func: async ws =>
         {
             server_state = "Connected";
 

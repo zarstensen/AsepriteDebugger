@@ -390,13 +390,11 @@ namespace Debugger
         /// <param name="short_err"> message fiedl value, should only be passed if success is false. </param>
         /// <param name="seq"> optionally override seq value. sets debugger_seq to seq + 1. </param>
         /// <returns></returns>
-        private JObject parseResponse(string location, JObject request, bool success, string? short_err = null, int? seq = null)
+        private JObject parseResponse(string location, JObject request, bool success, string? short_err = null)
         {
-            debugger_seq = seq ?? debugger_seq;
-
             JObject response = new();
 
-            response["seq"] = debugger_seq++;
+            response["seq"] = 0;
             response["type"] = "response";
 
             response["request_seq"] = request["seq"]?.Value<int>();

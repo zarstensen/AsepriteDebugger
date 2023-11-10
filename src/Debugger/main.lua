@@ -38,11 +38,7 @@ local shared_lib_ext = package.cpath:match(".+loadall%p(%a+)")
 
 package.cpath = tmp_cpath .. ";" .. ASEDEB.ext_path .. "/?." .. shared_lib_ext
 
-print("before require")
 require 'LuaWebSocket'
-print("after require")
-
-print(package.cpath)
 
 package.cpath = tmp_cpath
 
@@ -53,26 +49,34 @@ ASEDEB.config = ASEDEB.json.decode(config_file:read("a"))
 config_file:close()
 
 if ASEDEB.config.log_file then
-    -- overload print function, as it otherwise prints to aseprites built in console.
     io.output(ASEDEB.config.log_file)
+end
 
-    function print(...)
-        
-        local args = {...}
+ -- overload print function, as it otherwise prints to aseprites built in console.
+function print(...)
+    local args = {...}
 
-        for i=1,select("#", ...) do
+    for i=1,select("#", ...) do
+
+        if ASEDEB.config.log_file then
             io.write(tostring(args[i]), "\t")
         end
 
+        if(Debugger and Debugger.connected() and not ASEDEB.config.no_websocket_logging) then
+            Debugger.log(string.format("%s\t", tostring(args[i])))
+        end
+    end
+
+    if ASEDEB.config.log_file then
         io.write('\n')
         io.flush()
-
     end
 end
 
 if not ASEDEB.config.test_mode then
     require 'Debugger'
-    Debugger.init(ASEDEB.config.endpoint)
+    Debugger.connect(ASEDEB.config.endpoint)
+    Debugger.init()
 else
     dofile('tests/test_main.lua')
 end

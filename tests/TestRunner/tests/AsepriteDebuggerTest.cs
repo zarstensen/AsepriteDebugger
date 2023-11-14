@@ -103,7 +103,7 @@ namespace Debugger
 
             // remove debugger from aseprite
 
-            if (Directory.Exists(Path.Combine(aseprite_config_dir, $"extensions/{EXT_NAME}")) && false)
+            if (Directory.Exists(Path.Combine(aseprite_config_dir, $"extensions/{EXT_NAME}")))
                 Directory.Delete(Path.Combine(aseprite_config_dir, $"extensions/{EXT_NAME}"), true);
 
             base.Dispose();

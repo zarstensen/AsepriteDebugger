@@ -50,15 +50,31 @@ end
 --- Sends an error response to the connected debug adapter.
 ---@param error_message string detailed error message displayed to the user.
 ---@param short_message string | nil short machine readable error message. Defaults to error_message.
-function Response:sendError(error_message, short_message)
-    local response = P.newMsg('response', {
+function Response:sendError(id, short_message, error_message)
+    short_message = short_message or error_message
+
+    local response = {
         type = 'response',
+        seq = 0,
         success = false,
-        message = short_message or error_message,
-        body = { error = error_message },
-        request_seq = self.request.seq,
-        command = self.request.command,
-    })
+        message = short_message,
+        body = {
+            error = {
+                id = id,
+                format = error_message,
+                showUser = true
+            }
+        }
+        
+    }
+
+    if self.request then
+        response.request_seq = self.request.seq
+        response.command = self.request.command
+    else
+        response.request_seq = 1
+        response.command = 'initialize'
+    end
 
     JsonWS.sendJson(P.pipe_ws, response)
 end

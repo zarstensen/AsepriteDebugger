@@ -22,17 +22,6 @@ FROM debian:12-slim AS cpp-sdk
     ENV CC=clang
     ENV CXX=clang++
 
-################################################################################
-# stage for setting up and building test proj.
-FROM dotnet-sdk as debugger-test-build
-
-    COPY /src/ test-dir/src/
-    COPY /tests/ test-dir/tests/
-
-    WORKDIR /test-dir/tests/TestRunner/
-
-    RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
-        dotnet build
 
 ################################################################################
 # stage for building LuaWebSocket shared library, also runs tests.
@@ -59,6 +48,19 @@ FROM cpp-sdk AS luawebsocket-build
         && ctest --test-dir ./build --output-on-failure \
         && cmake --install ./build --config Release
 
+################################################################################
+# stage for setting up and building test proj.
+FROM dotnet-sdk as debugger-test-build
+
+    COPY /src/ test-dir/src/
+    COPY --from=luawebsocket-build LuaWebSocket/build/install/ /test-dir/src/Debugger/
+    COPY /tests/ test-dir/tests/
+
+    WORKDIR /test-dir/tests/TestRunner/
+
+    RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
+        dotnet build
+        
 ################################################################################
 # stage for compiling aseprite in the required configuration.
 FROM cpp-sdk AS aseprite-build

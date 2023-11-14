@@ -54,7 +54,7 @@ namespace Debugger
 
 
         public AsepriteDebuggerTest(ITestOutputHelper output)
-            :base(output)
+            : base(output)
         {
             use_xvfb = (Environment.GetEnvironmentVariable("ASEDEB_TEST_XVFB")?.ToLower() ?? "false") == "true";
             script_log = Environment.GetEnvironmentVariable("ASEDEB_SCRIPT_LOG") ?? script_log;
@@ -103,7 +103,7 @@ namespace Debugger
 
             // remove debugger from aseprite
 
-            if (Directory.Exists(Path.Combine(aseprite_config_dir, $"extensions/{EXT_NAME}")) && false)
+            if (Directory.Exists(Path.Combine(aseprite_config_dir, $"extensions/{EXT_NAME}")))
                 Directory.Delete(Path.Combine(aseprite_config_dir, $"extensions/{EXT_NAME}"), true);
 
             base.Dispose();
@@ -155,14 +155,14 @@ namespace Debugger
 
             int n_receive = 1;
 
-            while(!web_app_token.IsCancellationRequested)
+            while (!web_app_token.IsCancellationRequested)
             {
                 server_state = $"Receive [{n_receive++}]";
                 // other log events might come here aswell, so we just ignore those and block until we get the correct message.
                 JObject log_event = await receiveWebsocketJson(ws);
 
-                if(log_event.GetValue("event")?.ToString() == "output"
-                    && (log_event.GetValue("body") as JObject)?.GetValue("output")?.ToString() == "!<TEST LOG MESSAGE>!\t")
+                if (log_event.Value<string>("event") == "output"
+                    && log_event["body"]?.Value<string>("output") == "!<TEST LOG MESSAGE>!\t")
                 {
                     break;
                 }
@@ -183,12 +183,7 @@ namespace Debugger
 
             server_state = "Waiting for response";
 
-            JObject response;
-
-            do
-            {
-                response = await receiveWebsocketJson(ws);
-            } while (response.GetValue("type")?.ToString() != "response");
+            JObject response = await receiveNextResponse(ws, "initialize", true);
 
             server_state = "Received response";
             JObject expected_response = parseResponse("initialize_test/initialize_response.json", initialize_request, true);
@@ -199,6 +194,59 @@ namespace Debugger
 
             server_state = "Waiting for event";
             wsAssertEq(expected_event, await receiveWebsocketJson(ws), "Event did not match expected event.", comparer: JToken.DeepEquals);
+            server_state = "Received event";
+
+            await sendWebsocketJson(ws, parseRequest("launch_request.json"));
+            await receiveNextResponse(ws, "launch");
+
+            await sendWebsocketJson(ws, parseRequest("configdone_request.json"));
+            await receiveNextResponse(ws, "configurationDone");
+
+        });
+
+        /// <summary>
+        /// Test if breakpoints are set and hit correctly.
+        /// </summary>
+        [Fact]
+        public async Task settingAndHittingBreakpoints() => await testAsepriteDebugger(timeout: 10, "breakpoints_test.lua", async ws =>
+        {
+            server_state = "Connected";
+
+            await sendWebsocketJson(ws, parseRequest("initialize_test/initialize_request.json"));
+            await receiveNextResponse(ws, "initialize", true);
+
+            JObject breakpoints_request = parseRequest("breakpoint_test/set_breakpoints_request.json");
+
+            // source path needs to be absolute path, so it needs to be set in code.
+            breakpoints_request["arguments"]!["source"] = JObject.Parse($"{{ \"path\": \"{new FileInfo($"Debugger/tests/breakpoints_test.lua").FullName.Replace(@"\", @"\\")}\" }}");
+
+            // set breakpoints
+
+            await sendWebsocketJson(ws, breakpoints_request);
+            JObject breakpoints_response = await receiveNextResponse(ws, "setBreakpoints");
+
+            // check breakpoints were set correctly
+
+            wsAssertEq(3, breakpoints_response["body"]?["breakpoints"]?.Count(), "Breakpoint count did not match.");
+
+            wsAssertEq(8, breakpoints_response["body"]?["breakpoints"]?[0]?["line"], "Breakpoint placement was unexpected.");
+            wsAssertEq(11, breakpoints_response["body"]?["breakpoints"]?[1]?["line"], "Breakpoint placement was unexpected.");
+            wsAssertEq(18, breakpoints_response["body"]?["breakpoints"]?[2]?["line"], "Breakpoint placement was unexpected.");
+
+            await sendWebsocketJson(ws, parseRequest("launch_request.json"));
+            await receiveNextResponse(ws, "launch");
+
+            await sendWebsocketJson(ws, parseRequest("configdone_request.json"));
+            await receiveNextResponse(ws, "configurationDone");
+
+            // check breakpoints are hit
+
+            for(int i = 0; i < 3; i++)
+            {
+                await receiveNextEvent(ws, "stopped");
+                await sendWebsocketJson(ws, parseRequest("continue_request.json"));
+                await receiveNextResponse(ws, "continue");
+            }
         });
 
         #endregion
@@ -271,6 +319,8 @@ namespace Debugger
                     async ws =>
                     {
                         await test_func(ws);
+
+                        await sendWebsocketJson(ws, JObject.Parse("""{ "type": "test_end" }"""));
                         
                         if(should_stop)
                             web_app_token.Cancel();
@@ -316,6 +366,8 @@ namespace Debugger
             config["test_script"] = new FileInfo($"Debugger/tests/{test_script}").FullName;
             config["log_file"] = new FileInfo(script_log).FullName;
             config["pipe_ws_path"] = new FileInfo("PipeWebSocket.exe").FullName;
+            // since the scrit is run using the --script command line option, the source and install path will be equal.
+            config["install_dir"] = config["source_dir"] = new DirectoryInfo($"Debugger/tests/").FullName;
 
             File.WriteAllText(Path.Combine(dest_dir, "config.json"), config.ToString());
         }
@@ -372,6 +424,42 @@ namespace Debugger
             } while (!result.EndOfMessage);
 
             return JObject.Parse(response_builder.ToString());
+        }
+
+        /// <summary>
+        /// Receives the next message of passed type, discarding any other message types received.
+        /// </summary>
+        private async Task<JObject> receiveNextResponse(WebSocket socket, string? expected_command = null, bool assert_on_failed = true)
+        {
+            JObject response;
+
+            do
+            {
+                response = await receiveWebsocketJson(socket);
+            } while (response.Value<string>("type") != "response");
+
+            if (assert_on_failed)
+                wsAssert(response.Value<bool>("success"), $"Did not receive successfull response:\n{response}");
+
+            if (expected_command != null)
+                wsAssertEq(expected_command, response.Value<string>("command"), $"Received unexpected command type:\n{response}");
+
+            return response;
+        }
+
+        private async Task<JObject> receiveNextEvent(WebSocket socket, string? expected_event = null)
+        {
+            JObject event_message;
+
+            do
+            {
+                event_message = await receiveWebsocketJson(socket);
+            } while (event_message.Value<string>("type") != "event");
+
+            if (expected_event != null)
+                wsAssertEq(expected_event, event_message.Value<string>("event"), $"Received unexpected event type:\n{event_message}");
+
+            return event_message;
         }
 
         /// <summary>

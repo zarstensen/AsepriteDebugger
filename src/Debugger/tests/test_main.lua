@@ -23,6 +23,17 @@ function ASEDEB.testAssert(condition, message)
     JsonWS.sendJson(ASEDEB.test_pipe_ws, { type = "assert", message = trace_message })
 end
 
+function ASEDEB.waitForServerStop()
+    while true do
+        local recv = JsonWS.receiveJson(ASEDEB.test_pipe_ws)
+
+        if recv == nil or recv.type == "test_end" then
+            break
+        end
+
+    end
+end
+
 --- Signal to the test runner that all test checks have finished and aseprite can be terminated.
 --- If this is not called at some point, the test is considered a failure.
 function ASEDEB.stopTest()

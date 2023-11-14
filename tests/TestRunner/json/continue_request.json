@@ -1,0 +1,6 @@
+{
+  "command": "continue",
+  "arguments": {
+    "threadId": 1
+  }
+}

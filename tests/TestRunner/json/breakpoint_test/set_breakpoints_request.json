@@ -1,0 +1,11 @@
+{
+  "command": "setBreakpoints",
+  "arguments": {
+    "breakpoints": [
+      { "line": 6 },
+      { "line": 11 },
+      { "line": 15 },
+      { "line": 27 }
+    ]
+  }
+}

@@ -18,7 +18,7 @@ public:
 	/// @brief How long to wait, before checking if a function should stop blocking.
 	static constexpr std::chrono::milliseconds BLOCK_CHECK_INTERVAL = std::chrono::milliseconds(50);
 	
-	LUAWS_API inline WebSocket();
+	LUAWS_API WebSocket();
 
 	/// @brief Closes connection if currently connected.
 	inline ~WebSocket()

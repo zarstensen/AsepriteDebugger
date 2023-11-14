@@ -67,6 +67,10 @@ function print(...)
         end
     end
 
+    if(Debugger and Debugger.connected() and not ASEDEB.config.no_websocket_logging) then
+        Debugger.log('\n')
+    end
+
     if ASEDEB.config.log_file then
         io.write('\n')
         io.flush()

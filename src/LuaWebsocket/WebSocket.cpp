@@ -1,5 +1,11 @@
 #include "WebSocket.h"
 
+WebSocket::WebSocket()
+{
+	m_client.init_asio();
+	m_client.clear_access_channels(websocketpp::log::alevel::all);
+}
+
 void WebSocket::connect(const std::string& uri)
 {
 	std::error_code err;

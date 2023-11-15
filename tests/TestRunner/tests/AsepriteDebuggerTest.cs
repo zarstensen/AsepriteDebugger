@@ -440,12 +440,15 @@ namespace Debugger
         /// </summary>
         private async Task<JObject> receiveNextResponse(WebSocket socket, string? expected_command = null, bool assert_on_failed = true)
         {
+            server_state = $"Waiting on '{expected_command}' response";
             JObject response;
 
             do
             {
                 response = await receiveWebsocketJson(socket);
             } while (response.Value<string>("type") != "response");
+
+            server_state = $"Received '{expected_command}' response";
 
             if (assert_on_failed)
                 wsAssert(response.Value<bool>("success"), $"Did not receive successfull response:\n{response}");
@@ -458,12 +461,16 @@ namespace Debugger
 
         private async Task<JObject> receiveNextEvent(WebSocket socket, string? expected_event = null)
         {
+            server_state = $"Waiting on '{expected_event}' event";
+
             JObject event_message;
 
             do
             {
                 event_message = await receiveWebsocketJson(socket);
             } while (event_message.Value<string>("type") != "event");
+
+            server_state = $"Received '{expected_event}' event";
 
             if (expected_event != null)
                 wsAssertEq(expected_event, event_message.Value<string>("event"), $"Received unexpected event type:\n{event_message}");

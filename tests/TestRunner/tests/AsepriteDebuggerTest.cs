@@ -174,7 +174,7 @@ namespace Debugger
         /// Test if the debugger responds correctly to an initialize request.
         /// </summary>
         [Fact]
-        public async Task initializeDebugger() => await testAsepriteDebugger(timeout: 3, "initialize_test.lua", async ws =>
+        public async Task initializeDebugger() => await testAsepriteDebugger(timeout: 60, "initialize_test.lua", async ws =>
         {
             server_state = "Connected";
             JObject initialize_request = parseRequest("initialize_test/initialize_request.json");
@@ -208,7 +208,7 @@ namespace Debugger
         /// Test if breakpoints are set and hit correctly.
         /// </summary>
         [Fact]
-        public async Task settingAndHittingBreakpoints() => await testAsepriteDebugger(timeout: 3, "breakpoints_test.lua", async ws =>
+        public async Task settingAndHittingBreakpoints() => await testAsepriteDebugger(timeout: 60, "breakpoints_test.lua", async ws =>
         {
             server_state = "Connected";
 

@@ -3,13 +3,6 @@ require 'json.json'
 ---@class JsonWS
 local P = {}
 
--- Set global table containing debugger equal to the current lua file name.
-if _REQUIREDNAME == nil then
-    JsonWS = P
-else
-    _G[_REQUIREDNAME] = P
-end
-
 --- Send the passed table as a json string.
 ---@param ws LuaWebSocket
 ---@param msg table

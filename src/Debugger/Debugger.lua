@@ -1,95 +1,26 @@
-require 'JsonWS'
+local JsonWS = require 'JsonWS'
+local Response = require 'Response'
+local BreakpointHandler = require 'BreakpointHandler'
+local VariableHandler = require 'VariableHandler'
 
 ---@class Debugger
 ---@field handles table<fun(request: table, response: table, args: table), boolean>
----@field _stacktrace table[] current stacktrace if stopped, stored as a list of stackframes,
---- where the top stackframe is the last element in the list.
+---@field handlers table[] list of handler classes, which implement a set of response handlers.
+--- Each handler class must implement an register method, which takes handles as its argument,
+--- and registers all of its requests handles.
+--- Each handler class can optionally implement an onStop and onContinue function, which take no parameters,
+--- and are called whenever a stop event occurs or an continue / step request is received.
 local P = {
     ERR_NIL = 1,
     ERR_NOT_IMPLEMENTED = 2,
 
     THREAD_ID = 1,
-
-    breakpoints = { },
     handles = { },
-    _curr_breakpoint_id = 0,
+    handlers = { BreakpointHandler, VariableHandler },
     _curr_seq = 1,
     _stopped = true,
     _launched = false,
-    
-    _stacktrace = {},
 }
-
--- Set global table containing debugger equal to the current lua file name.
-if _REQUIREDNAME == nil then
-    Debugger = P
-else
-    _G[_REQUIREDNAME] = P
-end
-
----@class Response Class responsible for sending response messages to a specific request.
----@field request table request associated with the Response instance.
-local Response = {}
-
----@param request table
----@return Response response
-function Response.new(request)
-    local obj = {}
-    
-    Response.__index = Response
-    setmetatable(obj, Response)
-
-    obj.request = request
-
-    return obj
-end
-
---- Construct and send a successfull response table, containing the passed body, to the connected debug adapter.
----@param body table
-function Response:send(body)
-    local response = {
-        type = 'response',
-        seq = 0,
-        success = true,
-        body = body,
-        request_seq = self.request.seq,
-        command = self.request.command,
-    }
-
-    JsonWS.sendJson(P.pipe_ws, response)
-end
-
---- Sends an error response to the connected debug adapter.
----@param error_message string detailed error message displayed to the user.
----@param short_message string | nil short machine readable error message. Defaults to error_message.
-function Response:sendError(id, short_message, error_message)
-    short_message = short_message or error_message
-
-    local response = {
-        type = 'response',
-        seq = 0,
-        success = false,
-        message = short_message,
-        body = {
-            error = {
-                id = id,
-                format = error_message,
-                showUser = true
-            }
-        }
-        
-    }
-
-    if self.request then
-        response.request_seq = self.request.seq
-        response.command = self.request.command
-    else
-        response.request_seq = 1
-        response.command = 'initialize'
-    end
-
-    JsonWS.sendJson(P.pipe_ws, response)
-end
 
 --- Sets up the debug hook and connects to the debug adapter listening for websockets at the passed endpoint (or app.params.debugger_endpoint)
 ---@param endpoint string | nil app.params.debugger_endpoint if nil (passed as --script-param debugger_endpoint=<ENDPOINT>).
@@ -105,12 +36,14 @@ function P.connect(endpoint)
 
     P.handles[P.initialize] = true
     P.handles[P.launch] = true
-    P.handles[P.setBreakpoints] = true
     P.handles[P.configurationDone] = true
     P.handles[P.threads] = true
-    P.handles[P.stackTrace] = true
     P.handles[P.scopes] = true
     P.handles[P.continue] = true
+
+    for _, handler in ipairs(P.handlers) do
+        handler.register(P.handles)
+    end
 
     -- setup lua debugger
 
@@ -160,40 +93,7 @@ function P.initialize(args, response)
     P.event("initialized")
 end
 
----@param args table
----@param response Response
-function P.setBreakpoints(args, response)
-    -- all paths need to point to the actual installed location in the aseprite user config folder,
-    -- as we use these files to check for breakpoint validity.
-    local response_body = { breakpoints = { } }
-    local mapped_source = P.mapSource(args.source.path)
 
-    if mapped_source == nil then
-        response:send(response_body)
-        return
-    end
-
-    P.breakpoints[mapped_source] = { }
-
-    for _, breakpoint in ipairs(args.breakpoints) do
-        
-        local valid_line = P.validBreakpointLine(breakpoint.line, args.source.path)
-
-        if valid_line then
-            P._curr_breakpoint_id = P._curr_breakpoint_id + 1
-            P.breakpoints[mapped_source][valid_line] = P._curr_breakpoint_id
-
-            table.insert(response_body.breakpoints, {
-                verified = true,
-                id = P._curr_breakpoint_id,
-                line = valid_line,
-                source = args.source
-            })
-        end
-    end
-
-    response:send(response_body)
-end
 
 ---@param args table
 ---@param response Response
@@ -217,26 +117,6 @@ function P.threads(args, response)
     response:send({ threads = { { id = P.THREAD_ID, name = 'Main Thread' } }})
 end
 
---- Simply convert the current stacktrace stored at P._stacktrace to a valid debug adapter stacktrace response.
----@param args table
----@param response Response
-function P.stackTrace(args, response)
-    local stack_frames = { }
-
-    for i=args.startFrame + 1,args.levels + 1 do
-        if #P._stacktrace < i then
-            break;
-        end
-
-        table.insert(stack_frames, P._stacktrace[i])
-    end
-
-    response:send({
-        stackFrames = stack_frames,
-        totalFrames = #stack_frames
-    })
-end
-
 function P.scopes(args, response)
     response:send({ scopes = { } })
 end
@@ -248,25 +128,44 @@ function P.continue(args, response)
     response:send({ allThreadsContinued = true })
 end
 
+
+
 -- message helpers
 
 --- Dispatches the supplied message to a relevant request handler.
 --- If none is found, a not implemented error response is sent back.
 ---@param message table
 function P.handleMessage(message)
-    local response = Response.new(message)
+    local response = Response.new(message, P.pipe_ws)
 
     if not message then
         response:sendError(P.ERR_NIL, "Nil Value", "Received nil message")
         return
     end
 
-    if message.type ~= "request" or not P.handles[P[message.command]] then
-        response:sendError(P.ERR_NOT_IMPLEMENTED, "Not Implemented", string.format("The %s request is not implemented in the debugger.", message.command))
+    if message.type ~= "request" then
+        response:sendError(P.ERR_NOT_IMPLEMENTED, "Not Implemented", string.format("The %s message is not implemented in the debugger, as it is not a request type.", message.command))
         return
     end
 
-    P[message.command](message.arguments, response, message)
+    -- find the handler class which implements the request handle for the received message.
+    -- the debugger class itself is also included in this search.
+
+    local handler_class
+
+    for _, handler in ipairs({P, table.unpack(P.handlers)}) do
+        if P.handles[handler[message.command]] then
+            handler_class = handler
+            break
+        end
+    end
+
+    if not handler_class then
+        response:sendError(P.ERR_NOT_IMPLEMENTED, "Not Implemented", string.format("The %s message is not implemented in the debugger or any of its handlers.", message.command))
+        return
+    end
+
+    handler_class[message.command](message.arguments, response, message)
 end
 
 --- Send an event message to the connected debug adapter.
@@ -299,100 +198,7 @@ function P.stop(reason, description)
     P.event('stopped', { reason = reason, description = description, threadId = P.THREAD_ID, })
 end
 
---- Maps the passed source file, to its actual installed location in the aseprite user cofig directory.
---- If the file is not part of the installed source code, nil is returned instead.
----@param src any
----@return string | nil
-function P.mapSource(src)
-    local source_dir = app.fs.normalizePath(ASEDEB.config.source_dir)
-    local install_dir = app.fs.normalizePath(ASEDEB.config.install_dir)
-    
-    local _, end_src_dir_index = src:find(source_dir, 1, true)
 
-    if end_src_dir_index == nil then
-        return nil
-    end
-
-    return app.fs.normalizePath(app.fs.joinPath(install_dir, src:sub(end_src_dir_index + 1)))
-end
-
---- Maps the passed installed source file to its source code location.
----@param isntall_src any
----@return string | nil
-function P.mapInstalled(isntall_src)
-    local source_dir = app.fs.normalizePath(ASEDEB.config.source_dir)
-    local install_dir = app.fs.normalizePath(ASEDEB.config.install_dir)
-    
-    local _, end_install_dir_index = isntall_src:find(install_dir, 1, true)
-
-    if end_install_dir_index == nil then
-        return nil
-    end
-
-    return app.fs.normalizePath(app.fs.joinPath(source_dir, isntall_src:sub(end_install_dir_index + 1)))
-end
-
---- Returns a line in the passed file, which contains lua code.
---- The line is guaranteed to be the closest valid breakpoint line, after or at the passed line.
----@param line number
----@param file string
-function P.validBreakpointLine(line, file)
-    local file_handle, err = io.open(file, 'r')
-
-    local file_line
-
-    local is_inside_comment = false
-
-    local multi_line_comment_start = "^%s*%-%-%[%[.*$"
-    local multi_line_comment_end = "^%.*%]%].*$"
-    
-    -- read lines up until target line, keeping track of multiline comments.
-    for i=1,line do
-        file_line = file_handle:read("l")
-                
-        if file_line:match(multi_line_comment_start) then
-            is_inside_comment = true
-        end
-
-        if is_inside_comment and file_line:match(multi_line_comment_end) then
-            is_inside_comment = false
-        end
-
-    end
-
-    ---@type number | nil
-    local valid_line = line
-
-    while true do
-        if file_line == nil then
-            valid_line = nil
-            break
-        end
-
-        if file_line:match(multi_line_comment_start) then
-            is_inside_comment = true
-        end
-
-        if is_inside_comment and file_line:match(multi_line_comment_end) then
-            is_inside_comment = false
-
-            -- remove end of multiline comment, so next step can check if this line contains any other code.
-            file_line = file_line:gsub(".*%]%]", "")
-        end
-
-        -- match for non code lines.
-        if not is_inside_comment and not file_line:match("^%s*%-%-.*$") and not file_line:match("^%s*$") then
-            break
-        end
-
-        valid_line = valid_line + 1
-        file_line = file_handle:read("l")
-    end
-
-    file_handle:close()
-
-    return valid_line
-end
 
 -- debug specific
 
@@ -410,60 +216,33 @@ function P._debugHook(event, line)
     
     local src_key = app.fs.normalizePath(file_info.source:sub(2))
 
-    if file_info.source:sub(1, 1) ~= '@' or not P.breakpoints[src_key] then
+    if file_info.source:sub(1, 1) ~= '@' or not BreakpointHandler.breakpoints[src_key] then
         return
     end
 
     -- check if current line is a breakpoint
 
-    if P.breakpoints[src_key][line] then
+    if BreakpointHandler.breakpoints[src_key][line] then
         P.stop('breakpoint')
         
-        -- generate stacktrace
-
-        local stack_depth = 0
-        local stack_info = debug.getinfo(stack_depth + 2, "lnS")
-
-        while stack_info do
-
-            local stack_frame = {
-                name = stack_info.name,
-                -- id is simply the depth of the frame, as there should be no two stackframes with equal depth.
-                id = stack_depth,
-                source = {
-                    path = P.mapInstalled(stack_info.short_src)
-                },
-                line = stack_info.currentline,
-                -- column has to be specified here, but the debugger does not currently support detecting where in the line we are stopped,
-                -- so we just say its always at the start of the line.
-                column = 1
-            }
-
-            if not stack_frame.source.path then
-                -- source was unable to map to a source location.
-                stack_frame.source.path = stack_info.short_src
+        for _, handler in ipairs(P.handlers) do
+            if type(handler.onStop) == 'function' then
+                handler.onStop()
             end
-
-            if not stack_frame.name then
-                stack_frame.name = 'main'
-            end
-            
-            table.insert(P._stacktrace, #P._stacktrace + 1, stack_frame)
-            
-            stack_depth = stack_depth + 1
-
-            stack_info = debug.getinfo(stack_depth + 2, "lnS")
         end
-
+        
         -- constantly listen for new messages in order to perform a blocking operation,
         -- instead of just checking if new messages have arrived.
         while P._stopped do
             P.handleMessage(JsonWS.receiveJson(P.pipe_ws))
         end
 
-        P._stacktrace = {}
+        for _, handler in ipairs(P.handlers) do
+            if type(handler.onContinue) == 'function' then
+                handler.onContinue()
+            end
+        end
     end
 end
-
 
 return P

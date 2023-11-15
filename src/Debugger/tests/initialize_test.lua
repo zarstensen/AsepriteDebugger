@@ -1,14 +1,13 @@
-require 'Debugger'
 
 print("before init")
 
-Debugger.connect(ASEDEB.config.endpoint)
-Debugger.init()
+ASEDEB.Debugger.connect(ASEDEB.config.endpoint)
+ASEDEB.Debugger.init()
 
 print("after init")
 
-ASEDEB.testAssert(debug.gethook() == Debugger._debugHook, "Debugger hook was not set!")
-ASEDEB.testAssert(Debugger.handles[Debugger.initialize], "Initialize handle was not registered!")
+ASEDEB.testAssert(debug.gethook() == ASEDEB.Debugger._debugHook, "Debugger hook was not set!")
+ASEDEB.testAssert(ASEDEB.Debugger.handles[ASEDEB.Debugger.initialize], "Initialize handle was not registered!")
 
 ASEDEB.stopTest()
 print("Finished tests")
@@ -17,4 +16,4 @@ ASEDEB.waitForServerStop()
 
 print("server stopped")
 
-Debugger.deinit()
+ASEDEB.Debugger.deinit()

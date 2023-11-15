@@ -2,7 +2,7 @@
 --- Entry point for debugger extension in test configuration.
 --- 
 
-require 'JsonWS'
+local JsonWS = require 'JsonWS'
 
 --- Checks that the given condition is true, 
 --- and sends an assert json object back to the mock debug adapter with the passed message if not.

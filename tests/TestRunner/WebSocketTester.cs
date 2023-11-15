@@ -190,7 +190,7 @@ namespace TestRunner
         /// <param name="message"/>
         public void wsAssert(bool condition, string message, [CallerLineNumber] int line_number = 0)
         {
-            if (!condition)
+            if (!condition && !websocket_failed)
             {
                 websocket_fail_message = $"Websocket Error:\n{message}\nLine: {line_number}";
                 websocket_failed = true;

@@ -212,8 +212,10 @@ namespace Debugger
         {
             server_state = "Connected";
 
+            server_state = "Sent init request";
             await sendWebsocketJson(ws, parseRequest("initialize_test/initialize_request.json"));
             await receiveNextResponse(ws, "initialize", true);
+            server_state = "Received init response";
 
             JObject breakpoints_request = parseRequest("breakpoint_test/set_breakpoints_request.json");
 
@@ -222,8 +224,10 @@ namespace Debugger
 
             // set breakpoints
 
+            server_state = "Sent breakpoints request";
             await sendWebsocketJson(ws, breakpoints_request);
             JObject breakpoints_response = await receiveNextResponse(ws, "setBreakpoints");
+            server_state = "Received breakpoints response";
 
             // check breakpoints were set correctly
 
@@ -233,16 +237,21 @@ namespace Debugger
             wsAssertEq(11, breakpoints_response["body"]?["breakpoints"]?[1]?["line"], "Breakpoint placement was unexpected.");
             wsAssertEq(18, breakpoints_response["body"]?["breakpoints"]?[2]?["line"], "Breakpoint placement was unexpected.");
 
+            server_state = "Sent launch request";
             await sendWebsocketJson(ws, parseRequest("launch_request.json"));
             await receiveNextResponse(ws, "launch");
+            server_state = "Received launch response";
 
+            server_state = "Sent configdone request";
             await sendWebsocketJson(ws, parseRequest("configdone_request.json"));
             await receiveNextResponse(ws, "configurationDone");
+            server_state = "Received configdone response";
 
             // check breakpoints are hit
 
             for(int i = 0; i < 3; i++)
             {
+                server_state = $"Waiting for stop event nr. [{i + 1}]";
                 await receiveNextEvent(ws, "stopped");
                 await sendWebsocketJson(ws, parseRequest("continue_request.json"));
                 await receiveNextResponse(ws, "continue");
@@ -431,12 +440,15 @@ namespace Debugger
         /// </summary>
         private async Task<JObject> receiveNextResponse(WebSocket socket, string? expected_command = null, bool assert_on_failed = true)
         {
+            server_state = $"Waiting on '{expected_command}' response";
             JObject response;
 
             do
             {
                 response = await receiveWebsocketJson(socket);
             } while (response.Value<string>("type") != "response");
+
+            server_state = $"Received '{expected_command}' response";
 
             if (assert_on_failed)
                 wsAssert(response.Value<bool>("success"), $"Did not receive successfull response:\n{response}");
@@ -449,12 +461,16 @@ namespace Debugger
 
         private async Task<JObject> receiveNextEvent(WebSocket socket, string? expected_event = null)
         {
+            server_state = $"Waiting on '{expected_event}' event";
+
             JObject event_message;
 
             do
             {
                 event_message = await receiveWebsocketJson(socket);
             } while (event_message.Value<string>("type") != "event");
+
+            server_state = $"Received '{expected_event}' event";
 
             if (expected_event != null)
                 wsAssertEq(expected_event, event_message.Value<string>("event"), $"Received unexpected event type:\n{event_message}");

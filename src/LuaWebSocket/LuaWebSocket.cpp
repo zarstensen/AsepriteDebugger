@@ -60,8 +60,16 @@ std::unordered_map<std::string, lua_CFunction> method_map = {
 		WebSocket* ws = static_cast<WebSocket*>(lua_touserdata(L, 1));
 		std::string uri = lua_tostring(L, 2);
 
-		ws->connect(uri);
-		
+		try
+		{
+			ws->connect(uri);
+		}
+		catch(websocketpp::exception ex)
+		{
+			lua_pushstring(L, ex.what());
+			lua_error(L);
+		}
+
 		return 0;
 	}},
 
@@ -70,7 +78,15 @@ std::unordered_map<std::string, lua_CFunction> method_map = {
 
 		WebSocket* ws = static_cast<WebSocket*>(lua_touserdata(L, 1));
 
-		ws->close();
+		try
+		{
+			ws->close();
+		}
+		catch(websocketpp::exception ex)
+		{
+			lua_pushstring(L, ex.what());
+			lua_error(L);
+		}
 
 		return 0;
 	}},
@@ -91,7 +107,15 @@ std::unordered_map<std::string, lua_CFunction> method_map = {
 		WebSocket* ws = static_cast<WebSocket*>(lua_touserdata(L, 1));
 		std::string msg = lua_tostring(L, 2);
 
-		ws->send(msg);
+		try
+		{
+			ws->send(msg);
+		}
+		catch(websocketpp::exception ex)
+		{
+			lua_pushstring(L, ex.what());
+			lua_error(L);
+		}
 
 		return 0;
 	}},
@@ -101,7 +125,19 @@ std::unordered_map<std::string, lua_CFunction> method_map = {
 
 		WebSocket* ws = static_cast<WebSocket*>(lua_touserdata(L, 1));
 
-		std::optional<std::string> msg = ws->receive();
+		std::optional<std::string> msg;
+
+		try
+		{
+			msg = ws->receive();
+		}
+		catch(websocketpp::exception ex)
+		{
+			lua_pushstring(L, ex.what());
+			lua_error(L);
+
+			return 0;
+		}
 
 		if (msg)
 			lua_pushstring(L, msg->c_str());

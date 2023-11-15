@@ -1,7 +1,7 @@
-require 'Debugger'
 
-Debugger.connect(ASEDEB.config.endpoint)
-Debugger.init()
+
+ASEDEB.Debugger.connect(ASEDEB.config.endpoint)
+ASEDEB.Debugger.init()
 
 -- commented line
 

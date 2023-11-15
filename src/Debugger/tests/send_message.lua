@@ -1,4 +1,4 @@
-require 'JsonWS'
+local JsonWS = require 'JsonWS'
 
 print("OMG")
 

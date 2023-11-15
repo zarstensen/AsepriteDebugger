@@ -62,13 +62,13 @@ function print(...)
             io.write(tostring(args[i]), "\t")
         end
 
-        if(Debugger and Debugger.connected() and not ASEDEB.config.no_websocket_logging) then
-            Debugger.log(string.format("%s\t", tostring(args[i])))
+        if(ASEDEB.Debugger and ASEDEB.Debugger.connected() and not ASEDEB.config.no_websocket_logging) then
+            ASEDEB.Debugger.log(string.format("%s\t", tostring(args[i])))
         end
     end
 
-    if(Debugger and Debugger.connected() and not ASEDEB.config.no_websocket_logging) then
-        Debugger.log('\n')
+    if(ASEDEB.Debugger and ASEDEB.Debugger.connected() and not ASEDEB.config.no_websocket_logging) then
+        ASEDEB.Debugger.log('\n')
     end
 
     if ASEDEB.config.log_file then
@@ -77,10 +77,11 @@ function print(...)
     end
 end
 
+ASEDEB.Debugger = require 'Debugger'
+
 if not ASEDEB.config.test_mode then
-    require 'Debugger'
-    Debugger.connect(ASEDEB.config.endpoint)
-    Debugger.init()
+    ASEDEB.Debugger.connect(ASEDEB.config.endpoint)
+    ASEDEB.Debugger.init()
 else
     dofile('tests/test_main.lua')
 end

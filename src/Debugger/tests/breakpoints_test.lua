@@ -21,7 +21,7 @@ function_1()
 
 ASEDEB.stopTest()
 ASEDEB.waitForServerStop()
-ASEDEB.deinit()
+ASEDEB.Debugger.deinit()
 
 --
 -- final comment line

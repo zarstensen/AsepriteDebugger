@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.DataProtection;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Diagnostics;
@@ -128,7 +129,7 @@ namespace Debugger
                 web_app_token.Token);
 
             server_state = "Waiting for close";
-            Assert.Equal(WebSocketMessageType.Close, (await ws.ReceiveAsync(new byte[0], web_app_token.Token)).MessageType);
+            wsAssertEq(WebSocketMessageType.Close, (await ws.ReceiveAsync(new byte[0], web_app_token.Token)).MessageType);
         });
 
         /// <summary>
@@ -145,7 +146,7 @@ namespace Debugger
             wsAssertEq("test_message", recv["type"]);
 
             server_state = "Waiting for close";
-            Assert.Equal(WebSocketMessageType.Close, (await ws.ReceiveAsync(new byte[0], web_app_token.Token)).MessageType);
+            wsAssertEq(WebSocketMessageType.Close, (await ws.ReceiveAsync(new byte[0], web_app_token.Token)).MessageType);
         });
 
         [Fact]
@@ -177,13 +178,13 @@ namespace Debugger
         public async Task initializeDebugger() => await testAsepriteDebugger(timeout: 30, "initialize_test.lua", async ws =>
         {
             server_state = "Connected";
-            JObject initialize_request = parseRequest("initialize_test/initialize_request.json");
+            JObject initialize_request = parseRequest("initialize_request.json");
 
             await sendWebsocketJson(ws, initialize_request);
 
             server_state = "Waiting for response";
 
-            JObject response = await receiveNextResponse(ws, "initialize", true);
+            JObject response = await receiveNextResponse(ws, "initialize");
 
             server_state = "Received response";
             JObject expected_response = parseResponse("initialize_test/initialize_response.json", initialize_request, true);
@@ -204,6 +205,26 @@ namespace Debugger
 
         });
 
+        [Fact]
+        public async Task terminateEvent() => await testAsepriteDebugger(timeout: 30, "terminate_test.lua", async ws =>
+        {
+            await sendWebsocketJson(ws, parseRequest("initialize_request.json"));
+            await receiveNextResponse(ws, "initialize");
+            await receiveNextEvent(ws, "initialized");
+
+            await sendWebsocketJson(ws, parseRequest("launch_request.json"));
+            await receiveNextResponse(ws, "launch");
+
+            await sendWebsocketJson(ws, parseRequest("configdone_request.json"));
+            await receiveNextResponse(ws, "configurationDone");
+
+            // previous version of this test shutdown aseprite here,
+            // however this does not call the debugger extensions exit function when run with xvfb,
+            // as an alternative, the debugger is simply deinitted manually.
+            
+            await receiveNextEvent(ws, "terminated");
+        });
+
         /// <summary>
         /// Test if breakpoints are set and hit correctly.
         /// </summary>
@@ -213,7 +234,7 @@ namespace Debugger
             server_state = "Connected";
 
             server_state = "Sent init request";
-            await sendWebsocketJson(ws, parseRequest("initialize_test/initialize_request.json"));
+            await sendWebsocketJson(ws, parseRequest("initialize_request.json"));
             await receiveNextResponse(ws, "initialize", true);
             server_state = "Received init response";
 

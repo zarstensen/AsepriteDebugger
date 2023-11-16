@@ -61,10 +61,13 @@ function P.init()
     end
 end
 
---- Stop debugging and disconnect from the debug adapter.
+--- Stop debugging and disconnect from the debug adapter after sending terminated event.
 function P.deinit()
-    debug.sethook()
-    P.pipe_ws:close()
+    if(P.pipe_ws:isConnected()) then
+        P.event('terminated')
+        debug.sethook()
+        P.pipe_ws:close()
+    end
 end
 
 -- request handles

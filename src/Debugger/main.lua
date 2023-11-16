@@ -85,3 +85,7 @@ if not ASEDEB.config.test_mode then
 else
     dofile('tests/test_main.lua')
 end
+
+function exit(plugin)
+    ASEDEB.Debugger.deinit()
+end

@@ -215,7 +215,7 @@ namespace Debugger
             await sendWebsocketJson(ws, parseRequest("launch_request.json"));
             await receiveNextResponse(ws, "launch");
 
-            await sendWebsocketJson(ws, parseRequest("configdone_Request.json"));
+            await sendWebsocketJson(ws, parseRequest("configdone_request.json"));
             await receiveNextResponse(ws, "configurationDone");
 
             aseprite_proc?.CloseMainWindow();

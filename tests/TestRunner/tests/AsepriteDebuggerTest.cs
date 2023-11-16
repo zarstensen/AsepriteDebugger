@@ -206,7 +206,7 @@ namespace Debugger
         });
 
         [Fact]
-        public async Task closingAseprite() => await testAsepriteDebugger(timeout: 30, "close_aseprite.lua", async ws =>
+        public async Task terminateEvent() => await testAsepriteDebugger(timeout: 30, "terminate_test.lua", async ws =>
         {
             await sendWebsocketJson(ws, parseRequest("initialize_request.json"));
             await receiveNextResponse(ws, "initialize");
@@ -218,8 +218,10 @@ namespace Debugger
             await sendWebsocketJson(ws, parseRequest("configdone_request.json"));
             await receiveNextResponse(ws, "configurationDone");
 
-            aseprite_proc?.CloseMainWindow();
-
+            // previous version of this test shutdown aseprite here,
+            // however this does not call the debugger extensions exit function when run with xvfb,
+            // as an alternative, the debugger is simply deinitted manually.
+            
             await receiveNextEvent(ws, "terminated");
         });
 

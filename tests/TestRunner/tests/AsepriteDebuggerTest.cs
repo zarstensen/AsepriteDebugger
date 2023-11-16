@@ -114,7 +114,7 @@ namespace Debugger
         /// <summary>
         /// Test if LuaWebSocket send is working properly.
         /// Note: if LuaWebSocket is not working, the lua test wont be able to communicate with the test runner,
-        /// so error messages might be a bit wired, but this should catch this sort of failure non the less.
+        /// so error messages might be a bit weird, but this should catch this sort of failure non the less.
         /// </summary>
         [Fact]
         public async Task sendWebSocketMessage() => await testAsepriteDebugger(timeout: 30, "send_message.lua", async ws =>
@@ -251,8 +251,8 @@ namespace Debugger
 
             for(int i = 0; i < 3; i++)
             {
-                server_state = $"Waiting for stop event nr. [{i + 1}]";
-                await receiveNextEvent(ws, "stopped");
+                server_state = $"Waiting for stop event ";
+                await receiveNextEvent(ws, "stopped", state_msg: $"nr. [{i + 1}]");
                 await sendWebsocketJson(ws, parseRequest("continue_request.json"));
                 await receiveNextResponse(ws, "continue");
             }
@@ -335,6 +335,9 @@ namespace Debugger
                             web_app_token.Cancel();
 
                         should_stop = true;
+
+                        while(!web_app_token.IsCancellationRequested)
+                            await Task.Delay(50);
                     }
                 }
             });
@@ -438,9 +441,13 @@ namespace Debugger
         /// <summary>
         /// Receives the next message of passed type, discarding any other message types received.
         /// </summary>
-        private async Task<JObject> receiveNextResponse(WebSocket socket, string? expected_command = null, bool assert_on_failed = true)
+        private async Task<JObject> receiveNextResponse(WebSocket socket, string? expected_command = null, bool assert_on_failed = true, string? state_msg = null)
         {
             server_state = $"Waiting on '{expected_command}' response";
+
+            if (state_msg != null)
+                server_state = $"{server_state}: {state_msg}";
+
             JObject response;
 
             do
@@ -449,6 +456,9 @@ namespace Debugger
             } while (response.Value<string>("type") != "response");
 
             server_state = $"Received '{expected_command}' response";
+
+            if (state_msg != null)
+                server_state = $"{server_state}: {state_msg}";
 
             if (assert_on_failed)
                 wsAssert(response.Value<bool>("success"), $"Did not receive successfull response:\n{response}");
@@ -459,9 +469,12 @@ namespace Debugger
             return response;
         }
 
-        private async Task<JObject> receiveNextEvent(WebSocket socket, string? expected_event = null)
+        private async Task<JObject> receiveNextEvent(WebSocket socket, string? expected_event = null, string? state_msg = null)
         {
             server_state = $"Waiting on '{expected_event}' event";
+
+            if (state_msg != null)
+                server_state = $"{server_state}: {state_msg}";
 
             JObject event_message;
 
@@ -471,6 +484,9 @@ namespace Debugger
             } while (event_message.Value<string>("type") != "event");
 
             server_state = $"Received '{expected_event}' event";
+
+            if (state_msg != null)
+                server_state = $"{server_state}: {state_msg}";
 
             if (expected_event != null)
                 wsAssertEq(expected_event, event_message.Value<string>("event"), $"Received unexpected event type:\n{event_message}");

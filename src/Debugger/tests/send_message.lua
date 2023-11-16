@@ -12,5 +12,8 @@ ASEDEB.testAssert(
     "Received invalid message."
 )
 
-ws:close()
 ASEDEB.stopTest()
+
+ASEDEB.waitForServerStop()
+
+ws:close()

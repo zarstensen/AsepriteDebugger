@@ -6,5 +6,8 @@ ws:connect(ASEDEB.config.endpoint)
 
 JsonWS.sendJson(ws, { type = "test_message" })
 
-ws:close()
 ASEDEB.stopTest()
+
+ASEDEB.waitForServerStop()
+
+ws:close()

@@ -58,7 +58,6 @@ end
 function P.init()
     while P._stopped or not P._launched do
         P.handleMessage(JsonWS.receiveJson(P.pipe_ws))
-        print("CONTINUE: ", P._stopped, not P._launched)
     end
 end
 
@@ -73,7 +72,6 @@ end
 ---@param args table
 ---@param response Response
 function P.initialize(args, response)
-    print("INITIALIZED")
     -- TODO: implement all marked as false.
     response:send({
         supportsConfigurationDoneRequest = true,
@@ -100,19 +98,15 @@ end
 ---@param args table
 ---@param response Response
 function P.configurationDone(args, response)
-    print("CONFIG DONE START")
     P._stopped = false
     response:send({})
-    print("CONFIG DONE END")
 end
 
 ---@param args table
 ---@param response Response
 function P.launch(args, response)
-    print("LAUNCH START")
     P._launched = true
     response:send({})
-    print("LAUNCH END")
 end
 
 --- Debugger only works with one thread, since lua has no multithreading (except maybe for asepite websockets?),

@@ -1,0 +1,6 @@
+{
+  "command": "stackTrace",
+  "arguments": {
+    "threadId": 1
+  }
+}

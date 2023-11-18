@@ -1,0 +1,8 @@
+{
+  "threads": [
+    {
+      "id": 1,
+      "name": "Main Thread"
+    }
+  ]
+}

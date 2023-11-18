@@ -42,7 +42,6 @@ local P = {
 function P.register(handles)
     handles[P.scopes] = true
     handles[P.variables] = true
-    handles[P.evaluate] = true
 end
 
 

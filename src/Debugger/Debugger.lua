@@ -13,6 +13,7 @@ local VariableHandler = require 'VariableHandler'
 local P = {
     ERR_NIL = 1,
     ERR_NOT_IMPLEMENTED = 2,
+    ERR_EVALUATION_FAILED = 3,
 
     THREAD_ID = 1,
     handles = { },
@@ -38,7 +39,6 @@ function P.connect(endpoint)
     P.handles[P.launch] = true
     P.handles[P.configurationDone] = true
     P.handles[P.threads] = true
-    P.handles[P.scopes] = true
     P.handles[P.continue] = true
 
     for _, handler in ipairs(P.handlers) do
@@ -118,10 +118,6 @@ end
 ---@param response Response
 function P.threads(args, response)
     response:send({ threads = { { id = P.THREAD_ID, name = 'Main Thread' } }})
-end
-
-function P.scopes(args, response)
-    response:send({ scopes = { } })
 end
 
 ---@param args table

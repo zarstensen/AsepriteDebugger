@@ -66,12 +66,15 @@ end
 function P.stackTrace(args, response)
     local stack_frames = { }
 
-    for i=args.startFrame + 1,args.levels + 1 do
+    local start_frame = args.startFrame or 0
+    local frame_count = args.levels or 1000
+
+    for i=1,frame_count + 1 do
         if #P.stacktrace < i then
             break;
         end
 
-        table.insert(stack_frames, P.stacktrace[i])
+        table.insert(stack_frames, P.stacktrace[start_frame + i])
     end
 
     response:send({
@@ -91,6 +94,7 @@ function P.onStop()
         local stack_frame = {
             name = stack_info.name,
             -- id is simply the depth of the frame, as there should be no two stackframes with equal depth.
+            -- here depth is how close it is to the entry point.
             id = stack_depth,
             source = {
                 path = SourceMapper.mapInstalled(stack_info.short_src)

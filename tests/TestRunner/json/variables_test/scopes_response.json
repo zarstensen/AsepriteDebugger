@@ -1,0 +1,28 @@
+{
+  "scopes": [
+    {
+      "name": "Locals",
+      "variablesReference": 1
+    },
+    {
+      "name": "Arguments",
+      "variablesReference": 1
+    },
+    {
+      "name": "Upvalues",
+      "variablesReference": 1
+    },
+    {
+      "name": "Globals",
+      "variablesReference": 1
+    },
+    {
+      "name": "Globals Default",
+      "variablesReference": 1
+    },
+    {
+      "name": "Temporaries",
+      "variablesReference": 1
+    }
+  ]
+}

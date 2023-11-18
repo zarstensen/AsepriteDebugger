@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.WebSockets;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
@@ -221,7 +222,7 @@ namespace Debugger
             // previous version of this test shutdown aseprite here,
             // however this does not call the debugger extensions exit function when run with xvfb,
             // as an alternative, the debugger is simply deinitted manually.
-            
+
             await receiveNextEvent(ws, "terminated");
         });
 
@@ -231,12 +232,8 @@ namespace Debugger
         [Fact]
         public async Task settingAndHittingBreakpoints() => await testAsepriteDebugger(timeout: 30, "breakpoints_test.lua", async ws =>
         {
-            server_state = "Connected";
-
-            server_state = "Sent init request";
             await sendWebsocketJson(ws, parseRequest("initialize_request.json"));
             await receiveNextResponse(ws, "initialize", true);
-            server_state = "Received init response";
 
             JObject breakpoints_request = parseRequest("breakpoint_test/set_breakpoints_request.json");
 
@@ -270,13 +267,172 @@ namespace Debugger
 
             // check breakpoints are hit
 
-            for(int i = 0; i < 3; i++)
+            for (int i = 0; i < 3; i++)
             {
                 server_state = $"Waiting for stop event ";
                 await receiveNextEvent(ws, "stopped", state_msg: $"nr. [{i + 1}]");
                 await sendWebsocketJson(ws, parseRequest("continue_request.json"));
                 await receiveNextResponse(ws, "continue");
             }
+        });
+
+        [Fact]
+        public async Task retreivingVariables() => await testAsepriteDebugger(timeout: 1000, "variables_test.lua", async ws =>
+        {
+            await sendWebsocketJson(ws, parseRequest("initialize_request.json"));
+            await receiveNextResponse(ws, "initialize", true);
+
+            await sendWebsocketJson(ws, parseRequest("launch_request.json"));
+            await receiveNextResponse(ws, "launch");
+
+            JObject breakpoints_request = parseRequest("variables_test/set_breakpoints_request.json");
+
+            // source path needs to be absolute path, so it needs to be set in code.
+            breakpoints_request["arguments"]!["source"] = JObject.Parse($"{{ \"path\": \"{new FileInfo($"Debugger/tests/variables_test.lua").FullName.Replace(@"\", @"\\")}\" }}");
+
+            await sendWebsocketJson(ws, breakpoints_request);
+            await receiveNextResponse(ws, "setBreakpoints");
+
+            await sendWebsocketJson(ws, parseRequest("configdone_request.json"));
+            await receiveNextResponse(ws, "configurationDone");
+
+            await receiveNextEvent(ws, "stopped");
+
+            JObject threads_request = parseRequest("threads_request.json");
+            await sendWebsocketJson(ws, threads_request);
+            wsAssertEq(
+                parseResponse("variables_test/threads_response.json", threads_request, true),
+                await receiveNextResponse(ws, "threads"),
+                comparer: JToken.DeepEquals);
+
+            JObject stacktrace_request = parseRequest("stacktrace_request.json");
+            await sendWebsocketJson(ws, stacktrace_request);
+            JObject stacktrace_response = await receiveNextResponse(ws, "stackTrace");
+
+
+            JObject scopes_request = parseRequest("variables_test/scopes_request.json");
+            await sendWebsocketJson(ws, scopes_request);
+            JObject scopes_response = await receiveNextResponse(ws, "scopes");
+
+            wsAssertEq("scopes", scopes_response.Value<string>("command"), "Received incorrect response.");
+            wsAssertEq(6, scopes_response["body"]?["scopes"]?.Count(), "Received invalid amount of scopes.");
+
+            wsAssertEq(
+                6,
+                scopes_response["body"]?["scopes"]?
+                    .Select(scope => scope.Value<int>("variablesReference"))
+                    .Distinct()
+                    .Count(),
+                "All variablesReference values were not unique.");
+
+            JObject variables_request = parseRequest("variables_test/variables_request.json");
+            int variables_reference = 1;
+
+            // locals
+            
+            variables_request["arguments"]!["variablesReference"] = variables_reference++;
+
+            await sendWebsocketJson(ws, variables_request);
+            JObject locals_response = await receiveNextResponse(ws, "variables");
+
+            wsAssert(locals_response["body"]?["variables"]?.Where(variable =>
+            variable.Value<string>("name") == "local_number"
+            && variable.Value<int>("value") == 1).Count() == 1, "local_number variable not found.");
+
+            List<JToken>? table_var = locals_response["body"]?["variables"]?.Where(variable =>
+                variable.Value<string>("name") == "local_list_table"
+                && variable.Value<string>("type") == "table")?.ToList();
+
+            wsAssert(table_var?.Count == 1, "local_list_table variable not found");
+
+
+            List<JToken>? aseprite_rect_var = locals_response["body"]?["variables"]?.Where(variable =>
+                variable.Value<string>("name") == "local_aseprite_rect"
+                && variable.Value<string>("type") == "userdata")?.ToList();
+
+            wsAssert(aseprite_rect_var?.Count == 1, "local_aseprite_rect variable not found");
+
+            // locals table
+
+            variables_request["arguments"]!["variablesReference"] = table_var![0].Value<int>("variablesReference");
+            await sendWebsocketJson(ws, variables_request);
+            JObject table_response = await receiveNextResponse(ws, "variables");
+
+            wsAssertEq(4, table_response["body"]?["variables"]?.Count(), "Invalid table fields retreived");
+
+            wsAssert(table_response["body"]?["variables"]?.Where(variable =>
+            variable.Value<string>("name")?.Contains('1') ?? false
+            && variable.Value<string>("value") == "a").Count() == 1, "Could not find table list element 1");
+
+            wsAssert(table_response["body"]?["variables"]?.Where(variable =>
+            variable.Value<string>("name")?.Contains('2') ?? false
+            && variable.Value<string>("value") == "b").Count() == 1, "Could not find table list element 2");
+
+            wsAssert(table_response["body"]?["variables"]?.Where(variable =>
+            variable.Value<string>("name") == "a"
+            && variable.Value<int>("value") == 1).Count() == 1, "Could not find table kv pair");
+
+            wsAssert(table_response["body"]?["variables"]?.Where(variable =>
+            variable.Value<string>("name") == "b"
+            && variable.Value<int>("value") == 2).Count() == 1, "Could not find table kv pair");
+
+            // locals aseprite rect
+
+            variables_request["arguments"]!["variablesReference"] = aseprite_rect_var![0].Value<int>("variablesReference");
+            await sendWebsocketJson(ws, variables_request);
+            JObject aseprite_rect_resposne = await receiveNextResponse(ws, "variables");
+
+            foreach (var kv_pair in new Dictionary<string, int> { { "x", 10 }, { "y", 20 }, { "w", 30 }, { "h", 40 } })
+            {
+                wsAssert(aseprite_rect_resposne["body"]?["variables"]?.Where(variable =>
+                variable.Value<string>("name") == kv_pair.Key
+                && variable.Value<int>("value") == kv_pair.Value).Count() == 1, $"Invalid '{kv_pair.Key}'");
+            }
+
+            // arguments
+            variables_request["arguments"]!["variablesReference"] = variables_reference++;
+            await sendWebsocketJson(ws, variables_request);
+            JObject arguments_response = await receiveNextResponse(ws, "variables");
+
+            foreach (var kv_pair in new Dictionary<string, string> { { "arg_1", "arg_1" }, { "arg_2", "arg_2" }, { "(vararg)", "vararg" } })
+            {
+                wsAssert(arguments_response["body"]?["variables"]?.Where(variable =>
+                variable.Value<string>("name") == kv_pair.Key
+                && variable.Value<string>("value") == kv_pair.Value).Count() == 1, $"Invalid '{kv_pair.Key}'");
+            }
+
+            // upvalues
+            variables_request["arguments"]!["variablesReference"] = variables_reference++;
+            await sendWebsocketJson(ws, variables_request);
+            JObject upvalues_response = await receiveNextResponse(ws, "variables");
+
+            wsAssert(upvalues_response["body"]?["variables"]?.Where(variable =>
+                variable.Value<string>("name") == "up_value"
+                && variable.Value<bool>("value") == true).Count() == 1, $"Invalid upvalue value");
+
+            // globals
+
+            variables_request["arguments"]!["variablesReference"] = variables_reference++;
+            await sendWebsocketJson(ws, variables_request);
+            JObject globals_response = await receiveNextResponse(ws, "variables");
+
+            wsAssert(globals_response["body"]?["variables"]?.Where(variable =>
+                variable.Value<string>("name") == "Global"
+                && variable.Value<string>("value") == "Global").Count() == 1, $"Invalid globals value");
+
+            // globals default
+
+            variables_request["arguments"]!["variablesReference"] = variables_reference++;
+            await sendWebsocketJson(ws, variables_request);
+            JObject globals_default_response = await receiveNextResponse(ws, "variables");
+
+            // the '_G' variable should always be part of the default global scope.
+            wsAssert(globals_default_response["body"]?["variables"]?.Where(variable =>
+                variable.Value<string>("name") == "_G").Count() == 1, $"Invalid default globals value");
+
+            await sendWebsocketJson(ws, parseRequest("continue_request.json"));
+            await receiveNextResponse(ws, "continue");
+
         });
 
         #endregion

@@ -1,4 +1,4 @@
-require 'Response'
+local Response = require 'Response'
 
 --- Handler class for all things related to variables and code evaluation.
 ---@class VariableHandler
@@ -28,8 +28,10 @@ local P = {
     TABLE_LIKE_VARIABLE = 'Table Like Variable',
     GETTERS_VARIABLE = 'Getters Variable',
 
+    -- debug.getInfo -[1]-> handleMessage -[2]-> debugHook -[3]-> relevant code.
+    DEPTH_OFFSET = 3,
     -- debug.getInfo -[1]-> variableRetreiver -[2]-> variablesRequest -[3]-> handleMessage -[4]-> debugHook -[5]-> relevant code.
-    DEPTH_OFFSET = 5,
+    RETREIVER_OFFSET = 5,
 
     scope_info = {},
     scope_variable_retreivers = { },
@@ -42,8 +44,90 @@ local P = {
 function P.register(handles)
     handles[P.scopes] = true
     handles[P.variables] = true
+    handles[P.evaluate] = true
 end
 
+--- Evaluate an expression with all variable values accessible to the passed frameId, except for varargs, as its environment.
+---@param args any
+---@param response Response
+function P.evaluate(args, response)
+
+    local eval_str = string.format("return %s", args.expression)
+
+    -- per the debug protocol specification, if no frameid is supplied the evaluation should happen in global scope,
+    -- hence _G is passed as the env value.
+
+    local eval_env = _G
+
+    -- create environment table, filled with all variables the debugger can retreive from the passed frame id.
+    if args.frameId then
+
+        eval_env = { }
+
+        for _, scope in ipairs({
+            P.LOCAL_SCOPE,
+            P.ARGUMENT_SCOPE,
+            P.UPVALUE_SCOPE,
+            P.GLOBAL_SCOPE,
+            P.GLOBAL_DEFAULT_SCOPE,
+            -- temporary scope is filled with unnamed variables, so we ignore it here.
+        }) do
+            local variables = P.scope_variable_retreivers[scope]({
+                type = scope,
+                depth = args.frameId
+            })
+
+            for _, var in ipairs(variables) do
+                -- we do not want to store variables with no names in the environment.
+                -- this does mean varargs will not be accessible when evaluating expressions.
+                if var[1] ~= '(' and var[#var] ~= ')' then
+                    eval_env[var.name] = var.value
+                end
+            end
+
+        end
+    end
+
+    local eval_func, err = load(eval_str, eval_str, 't', eval_env)
+
+    if err then
+        response:sendError(3, 'Evaluate Error', err)
+        return
+    end
+    
+    local res = table.pack(pcall(eval_func))
+
+    if res[1] then
+        local res_str = ""
+
+        for i = 2, math.max(2, #res) do
+            res_str = res_str .. tostring(res[i]) .. '\t'
+        end
+        
+        if #res <= 2 then
+            res = res[2] 
+        else
+            res = table.pack(table.unpack(res, 2))
+            res.n = nil
+        end
+
+        local variable = P.registerVariable(nil, res)
+
+        response:send({
+            result = res_str,
+            type = variable.type,
+            variablesReference = variable.variablesReference,
+        })
+
+    else
+        response:sendError(
+            ASEDEB.Debugger.ERR_EVALUATION_FAILED,
+            "Evaluation Failed",
+            res[2]
+        )
+    end
+
+end
 
 function P.onContinue()
     -- variables and scopes should be reretreived on every stop,
@@ -70,8 +154,8 @@ end
 --- Create a debug adapter scope type with an unique id, from the passed parameters
 ---@param frameid number
 ---@param name string
----@param hint string
----@param expensive boolean
+---@param hint string?
+---@param expensive boolean?
 ---@return table
 function P.createScope(frameid, name, hint, expensive)
     local scope = {
@@ -106,35 +190,8 @@ function P.variables(args, response)
         local variables = variable_retreiver(scope_info)
         
         for _, var in pairs(variables) do
-
-            local variable_entry = {
-                name = var.name,
-                value = tostring(var.value),
-                type = type(var.value),
-                evaluateName = var.name,
-                variablesReference = 0
-            }
-
-            -- special handling is required for structured variables, since we need to figure out how we get their child variables.
-            -- __getters is a metamethod aseprite implements for some of its userdata values, which returns all of its gettable members.
-            if type(var.value) == 'table' or type(var.value) == 'userdata' and (getmetatable(var.value).__pairs or getmetatable(var.value).__ipairs or getmetatable(var.value).__getters) then
-                variable_entry.variablesReference = P.curr_scope_id
-                
-                local scope_type
-
-                if type(var.value) == 'table' or getmetatable(var.value).__pairs or getmetatable(var.value).__ipairs then
-                    scope_type = P.TABLE_LIKE_VARIABLE
-                elseif getmetatable(var.value).__getters then
-                    scope_type = P.GETTERS_VARIABLE
-                end
-
-                P.scope_info[P.curr_scope_id] = { 
-                    type = scope_type,
-                    value = var.value
-                }
-
-                P.curr_scope_id = P.curr_scope_id + 1
-            end
+            local variable_entry = P.registerVariable(var.name, var.value)
+            variable_entry.evaluateName = variable_entry.name
 
             table.insert(response_variables, variable_entry)
         end
@@ -211,8 +268,8 @@ end
 function P.getArgumentVariables(scope_info)
     local arguments = { }
 
-    for param=1, debug.getinfo(scope_info.depth + P.DEPTH_OFFSET, 'uf').nparams do
-        local name, value = debug.getlocal(scope_info.depth + P.DEPTH_OFFSET, param)
+    for param=1, debug.getinfo(scope_info.depth + P.RETREIVER_OFFSET, 'uf').nparams do
+        local name, value = debug.getlocal(scope_info.depth + P.RETREIVER_OFFSET, param)
         table.insert(arguments, {
             name = name,
             value = value
@@ -222,7 +279,7 @@ function P.getArgumentVariables(scope_info)
     local var_indx = -1
 
     while true do
-        local name, value = debug.getlocal(scope_info.depth + P.DEPTH_OFFSET, var_indx)
+        local name, value = debug.getlocal(scope_info.depth + P.RETREIVER_OFFSET, var_indx)
 
         if not name then
             break
@@ -248,11 +305,11 @@ function P.getLocalVariables(scope_info)
 
     -- since both arguments and locals are retreived with getlocal,
     -- we also need to offset the index with the amount of arguments to the current function, so we dont include arguments in the local scope.
-    local var_index = debug.getinfo(scope_info.depth + P.DEPTH_OFFSET, 'u').nparams + 1
+    local var_index = debug.getinfo(scope_info.depth + P.RETREIVER_OFFSET, 'u').nparams + 1
 
     while true do
         print(var_index)
-        local var_name, var_value = debug.getlocal(scope_info.depth + P.DEPTH_OFFSET, var_index)
+        local var_name, var_value = debug.getlocal(scope_info.depth + P.RETREIVER_OFFSET, var_index)
         var_index = var_index + 1
 
         if not var_name then
@@ -317,7 +374,7 @@ end
 function P.getUpvalueVariables(scope_info)
     local upvalues = {}
 
-    local deb_info = debug.getinfo(scope_info.depth + P.DEPTH_OFFSET, 'uf')
+    local deb_info = debug.getinfo(scope_info.depth + P.RETREIVER_OFFSET, 'uf')
 
     for up=1, deb_info.nups do
         local name, value = debug.getupvalue(deb_info.func, up)
@@ -336,11 +393,11 @@ end
 function P.getTemporaryVariables(scope_info)
     local variables = { }
 
-    local var_index = debug.getinfo(scope_info.depth + P.DEPTH_OFFSET, 'u').nparams + 1
+    local var_index = debug.getinfo(scope_info.depth + P.RETREIVER_OFFSET, 'u').nparams + 1
 
     while true do
         print(var_index)
-        local var_name, var_value = debug.getlocal(scope_info.depth + P.DEPTH_OFFSET, var_index)
+        local var_name, var_value = debug.getlocal(scope_info.depth + P.RETREIVER_OFFSET, var_index)
         var_index = var_index + 1
 
         if not var_name then
@@ -356,6 +413,44 @@ function P.getTemporaryVariables(scope_info)
     end
 
     return variables
+end
+
+--- Returns a debug adapter variable structure for the passed variable name and its value.
+--- Automatically sets variablesReference and registers the variable in the scope_info table, if the variable is deemed to be structured.
+---@param name string?
+---@param value any
+---@return table
+function P.registerVariable(name, value)
+    local variable = {
+        name = name,
+        evaluateName = name,
+        value = tostring(value),
+        type = type(value),
+        variablesReference = 0
+    }
+
+    -- special handling is required for structured variables, since we need to figure out how we get their child variables.
+    -- __getters is a metamethod aseprite implements for some of its userdata values, which returns all of its gettable members.
+    if type(value) == 'table' or type(value) == 'userdata' and (getmetatable(value).__pairs or getmetatable(value).__ipairs or getmetatable(value).__getters) then
+        variable.variablesReference = P.curr_scope_id
+        
+        local scope_type
+
+        if type(value) == 'table' or getmetatable(value).__pairs or getmetatable(value).__ipairs then
+            scope_type = P.TABLE_LIKE_VARIABLE
+        elseif getmetatable(value).__getters then
+            scope_type = P.GETTERS_VARIABLE
+        end
+
+        P.scope_info[P.curr_scope_id] = { 
+            type = scope_type,
+            value = value
+        }
+
+        P.curr_scope_id = P.curr_scope_id + 1
+    end
+
+    return variable
 end
 
 -- tie variable retreivers to their scope type.

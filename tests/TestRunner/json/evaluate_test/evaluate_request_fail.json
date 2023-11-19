@@ -1,0 +1,6 @@
+{
+  "command": "evaluate",
+  "arguments": {
+    "expression": "invalid_value.invalid_key + 1"
+  }
+}

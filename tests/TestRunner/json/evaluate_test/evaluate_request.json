@@ -1,0 +1,7 @@
+{
+  "command": "evaluate",
+  "arguments": {
+    "expression": "1 + value",
+    "frameId": 0
+  }
+}

@@ -277,7 +277,43 @@ namespace Debugger
         });
 
         [Fact]
-        public async Task retreivingVariables() => await testAsepriteDebugger(timeout: 1000, "variables_test.lua", async ws =>
+        public async Task evaluateExpression() => await testAsepriteDebugger(timeout: 30, "evaluate_test.lua", async ws =>
+        {
+            await sendWebsocketJson(ws, parseRequest("initialize_request.json"));
+            await receiveNextResponse(ws, "initialize", true);
+
+            await sendWebsocketJson(ws, parseRequest("launch_request.json"));
+            await receiveNextResponse(ws, "launch");
+
+            JObject breakpoints_request = parseRequest("evaluate_test/set_breakpoints_request.json");
+
+            // source path needs to be absolute path, so it needs to be set in code.
+            breakpoints_request["arguments"]!["source"] = JObject.Parse($"{{ \"path\": \"{new FileInfo($"Debugger/tests/evaluate_test.lua").FullName.Replace(@"\", @"\\")}\" }}");
+
+            await sendWebsocketJson(ws, breakpoints_request);
+            await receiveNextResponse(ws, "setBreakpoints");
+
+            await sendWebsocketJson(ws, parseRequest("configdone_request.json"));
+            await receiveNextResponse(ws, "configurationDone");
+
+            await receiveNextEvent(ws, "stopped");
+
+            await sendWebsocketJson(ws, parseRequest("evaluate_test/evaluate_request.json"));
+            wsAssertEq(2, int.Parse((await receiveNextResponse(ws, "evaluate"))["body"]?.Value<string>("result") ?? "-1"), "Evaluation failed.");
+
+            await sendWebsocketJson(ws, parseRequest("evaluate_test/evaluate_request_fail.json"));
+            wsAssertEq(false, (await receiveNextResponse(ws, "evaluate", false)).Value<bool>("success"), "Evaluation did not fail.");
+
+            await sendWebsocketJson(ws, parseRequest("continue_request.json"));
+            await receiveNextResponse(ws, "continue");
+
+        });
+
+        /// <summary>
+        /// test retreival of various variable types from various scopes.
+        /// </summary>
+        [Fact]
+        public async Task retreivingVariables() => await testAsepriteDebugger(timeout: 30, "variables_test.lua", async ws =>
         {
             await sendWebsocketJson(ws, parseRequest("initialize_request.json"));
             await receiveNextResponse(ws, "initialize", true);

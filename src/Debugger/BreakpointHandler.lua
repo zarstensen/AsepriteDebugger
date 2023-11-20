@@ -62,7 +62,7 @@ end
 function P.stackTrace(args, response)
     local stackframes = { }
 
-    if args.levels <= 0 then
+    if args.levels and args.levels <= 0 then
         args.levels = nil
     end
 

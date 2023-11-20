@@ -208,9 +208,6 @@ end
 -- debug specific
 
 function P._debugHook(event, line)
-
-    print(event, line)
-    
     -- update stacktrace
     
     local stack_trace_update_event = {

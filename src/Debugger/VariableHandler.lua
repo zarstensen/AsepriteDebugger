@@ -249,7 +249,6 @@ function P.getGetterFields(scope_info)
     local children = {}
 
     for field, getter in pairs(getmetatable(scope_info.value).__getters) do
-        print(debug.getinfo(getter, 'u').nparams)
         table.insert(children, {
             name = field,
             -- pass value for non static getters, as it would act as self / this in the method.
@@ -308,7 +307,6 @@ function P.getLocalVariables(scope_info)
     local var_index = debug.getinfo(scope_info.depth + P.RETREIVER_OFFSET, 'u').nparams + 1
 
     while true do
-        print(var_index)
         local var_name, var_value = debug.getlocal(scope_info.depth + P.RETREIVER_OFFSET, var_index)
         var_index = var_index + 1
 
@@ -396,7 +394,6 @@ function P.getTemporaryVariables(scope_info)
     local var_index = debug.getinfo(scope_info.depth + P.RETREIVER_OFFSET, 'u').nparams + 1
 
     while true do
-        print(var_index)
         local var_name, var_value = debug.getlocal(scope_info.depth + P.RETREIVER_OFFSET, var_index)
         var_index = var_index + 1
 

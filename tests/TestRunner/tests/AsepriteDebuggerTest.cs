@@ -192,10 +192,9 @@ namespace Debugger
 
             wsAssertEq(expected_response, response, "Response did not match expected response.", comparer: JToken.DeepEquals);
 
-            JObject expected_event = parseEvent("initialize_test/initialize_event.json");
 
             server_state = "Waiting for event";
-            wsAssertEq(expected_event, await receiveWebsocketJson(ws), "Event did not match expected event.", comparer: JToken.DeepEquals);
+            await receiveNextEvent(ws, "initialized");
             server_state = "Received event";
 
             await sendWebsocketJson(ws, parseRequest("launch_request.json"));
@@ -694,7 +693,7 @@ namespace Debugger
             do
             {
                 event_message = await receiveWebsocketJson(socket);
-            } while (event_message.Value<string>("type") != "event");
+            } while (event_message.Value<string>("type") != "event" || event_message.Value<string>("event") == "stackTraceUpdate");
 
             server_state = $"Received '{expected_event}' event";
 

@@ -6,15 +6,12 @@ local SourceMapper = require 'SourceMapper'
 --- mapped as [normalized source file path] -> [linue number] -> [breakpoint id].
 --- so in order to check if the source file 's' has a breakpoint at line number 'l',
 --- one should check if breakpoints[s][l] is nil, where s is the normalized source file path (app.fs.normalizePath).
----@field stacktrace table[] current stacktrace if stopped, stored as a list of stackframes,
---- where the top stackframe is the last element in the list.
 local P = {
     -- debug.getInfo -[1]-> onStop -[2]-> debugHook -[3]-> relevant code.
     DEPTH_OFFSET = 3,
 
     curr_breakpoint_id = 0,
     breakpoints = {},
-    stacktrace = {}
 }
 
 --- Registers relevant message handles in the debugger.
@@ -42,7 +39,6 @@ function P.setBreakpoints(args, response)
     for _, breakpoint in ipairs(args.breakpoints) do
         
         local valid_line = P.validBreakpointLine(breakpoint.line, args.source.path)
-        print("VAID LINE: ", valid_line)
 
         if valid_line then
             P.curr_breakpoint_id = P.curr_breakpoint_id + 1
@@ -60,73 +56,47 @@ function P.setBreakpoints(args, response)
     response:send(response_body)
 end
 
---- Simply convert the current stacktrace stored at P.stacktrace to a valid debug adapter stacktrace response.
+--- Simply convert the current stacktrace stored at Debugger.stacktrace to a valid debug adapter stacktrace response.
 ---@param args table
 ---@param response Response
 function P.stackTrace(args, response)
-    local stack_frames = { }
+    local stackframes = { }
+
+    if args.levels <= 0 then
+        args.levels = nil
+    end
 
     local start_frame = args.startFrame or 0
     local frame_count = args.levels or 1000
 
-    for i=1,frame_count + 1 do
-        if #P.stacktrace < i then
-            break;
+    local tail_call_count = 0
+
+    for i=1,math.min(start_frame + frame_count, #ASEDEB.Debugger.stacktrace) do
+        local stackframe_id = i - 1
+        local deb_stackframe = ASEDEB.Debugger.stacktrace[#ASEDEB.Debugger.stacktrace - stackframe_id]
+        
+        if i >= start_frame + 1 and i <= start_frame + frame_count then
+            local stackframe = {
+                name = deb_stackframe.name,
+                source = deb_stackframe.source,
+                line = deb_stackframe.line,
+                column = deb_stackframe.column
+            }
+            
+            stackframe.id = stackframe_id - tail_call_count
+            table.insert(stackframes, stackframe)
+        end
+            
+        if deb_stackframe.is_tail_call then
+            tail_call_count = tail_call_count + 1
         end
 
-        table.insert(stack_frames, P.stacktrace[start_frame + i])
     end
 
     response:send({
-        stackFrames = stack_frames,
-        totalFrames = #stack_frames
+        stackFrames = stackframes,
+        totalFrames = #ASEDEB.Debugger.stacktrace
     })
-end
-
-function P.onStop()
-    -- generate stacktrace
-
-    local stack_depth = 0
-    local stack_info = debug.getinfo(stack_depth + P.DEPTH_OFFSET, "lnS")
-
-    while stack_info do
-
-        local stack_frame = {
-            name = stack_info.name,
-            -- id is simply the depth of the frame, as there should be no two stackframes with equal depth.
-            -- here depth is how close it is to the entry point.
-            id = stack_depth,
-            source = {
-                path = SourceMapper.mapInstalled(stack_info.short_src)
-            },
-            line = stack_info.currentline,
-            -- column has to be specified here, but the debugger does not currently support detecting where in the line we are stopped,
-            -- so we just say its always at the start of the line.
-            column = 1
-        }
-
-        if not stack_frame.source.path then
-            -- source was unable to map to a source location.
-            stack_frame.source.path = stack_info.short_src
-        end
-
-        if not stack_frame.name then
-            stack_frame.name = 'main'
-        end
-        
-        table.insert(P.stacktrace, #P.stacktrace + 1, stack_frame)
-        
-        stack_depth = stack_depth + 1
-
-        stack_info = debug.getinfo(stack_depth + P.DEPTH_OFFSET, "lnS")
-    end
-
-end
-
-function P.onContinue()
-    -- stacktrace is only needed when stopped,
-    -- so it is cleared here to enable a potential garbage collect to free its memory.
-    P.stacktrace = {}
 end
 
 --- Returns a line in the passed file, which contains lua code.

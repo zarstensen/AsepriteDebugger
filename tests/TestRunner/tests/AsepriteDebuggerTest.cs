@@ -155,16 +155,25 @@ namespace Debugger
         {
             server_state = "Connected";
 
+            await sendWebsocketJson(ws, parseRequest("initialize_request.json"));
+            await receiveNextResponse(ws, "initialize");
+            await receiveNextEvent(ws, "initialized");
+
+            await sendWebsocketJson(ws, parseRequest("launch_request.json"));
+            await receiveNextResponse(ws, "launch");
+
+            await sendWebsocketJson(ws, parseRequest("configdone_request.json"));
+            await receiveNextResponse(ws, "configurationDone");
+
             int n_receive = 1;
 
+            
             while (!web_app_token.IsCancellationRequested)
             {
-                server_state = $"Receive [{n_receive++}]";
                 // other log events might come here aswell, so we just ignore those and block until we get the correct message.
-                JObject log_event = await receiveWebsocketJson(ws);
+                JObject log_event = await receiveNextEvent(ws, "output", $"Receive [{n_receive++}]");
 
-                if (log_event.Value<string>("event") == "output"
-                    && log_event["body"]?.Value<string>("output") == "!<TEST LOG MESSAGE>!\t")
+                if (log_event["body"]?.Value<string>("output") == "!<TEST LOG MESSAGE>!\t")
                 {
                     break;
                 }

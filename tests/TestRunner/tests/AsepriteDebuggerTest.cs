@@ -441,8 +441,10 @@ namespace Debugger
 
             await sendWebsocketJson(ws, parseRequest("continue_request.json"));
             await receiveNextResponse(ws, "continue");
-            
+
             // tail calls
+
+            await receiveNextEvent(ws, "stopped");
 
             await sendWebsocketJson(ws, parseRequest("code_stepping/step_out_request.json"));
             await receiveNextResponse(ws, "stepOut");

@@ -1,0 +1,6 @@
+{
+  "command": "stepOut",
+  "arguments": {
+    "threadId": 1
+  }
+}

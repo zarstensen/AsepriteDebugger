@@ -28,8 +28,6 @@ local P = {
     TABLE_LIKE_VARIABLE = 'Table Like Variable',
     GETTERS_VARIABLE = 'Getters Variable',
 
-    -- debug.getInfo -[1]-> handleMessage -[2]-> debugHook -[3]-> relevant code.
-    DEPTH_OFFSET = 3,
     -- debug.getInfo -[1]-> variableRetreiver -[2]-> variablesRequest -[3]-> handleMessage -[4]-> debugHook -[5]-> relevant code.
     RETREIVER_OFFSET = 5,
 
@@ -179,6 +177,11 @@ end
 ---@param response Response
 function P.variables(args, response)
     local scope_info = P.scope_info[args.variablesReference]
+
+    if not scope_info then
+        response:send({ variables = { } })
+        return
+    end
 
     -- functions which are able to retreive the passed scope types variabies are stored in this variable,
     -- for quick retreival here.

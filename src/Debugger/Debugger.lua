@@ -2,7 +2,8 @@ local JsonWS = require 'JsonWS'
 local Response = require 'Response'
 local BreakpointHandler = require 'BreakpointHandler'
 local VariableHandler = require 'VariableHandler'
-local SourceMapper = require 'SourceMapper'
+local StackTraceHandler = require 'StackTraceHandler'
+local StepHandler = require 'StepHandler'
 
 ---@class Debugger
 ---@field handles table<fun(request: table, response: table, args: table), boolean>
@@ -11,8 +12,9 @@ local SourceMapper = require 'SourceMapper'
 --- and registers all of its requests handles.
 --- Each handler class can optionally implement an onStop and onContinue function, which take no parameters,
 --- and are called whenever a stop event occurs or an continue / step request is received.
----@field stacktrace table[] current stacktrace if stopped, stored as a list of stackframes,
---- where the top stackframe is the first element in the list.
+--- Each handler class can optionally implement an onDebugHook function, which is called any time the debuggers debug hook is fired.
+--- the current event and optionally line will be passed to this function.
+--- onDebugHook is called before any new requests from the client is handled.
 local P = {
     ERR_NIL = 1,
     ERR_NOT_IMPLEMENTED = 2,
@@ -20,9 +22,12 @@ local P = {
 
     THREAD_ID = 1,
 
+    -- debug.getInfo -[1]-> onStop -[2]-> debugHook -[3]-> relevant code.
+    HANDLER_DEPTH_OFFSET = 3,
+
     handles = { },
-    handlers = { BreakpointHandler, VariableHandler },
-    stacktrace = { },
+    handlers = { BreakpointHandler, VariableHandler, StackTraceHandler, StepHandler },
+    
     curr_stack_depth = 0,
     _curr_seq = 1,
     _stopped = true,
@@ -203,87 +208,32 @@ function P.stop(reason, description)
     P.event('stopped', { reason = reason, description = description, threadId = P.THREAD_ID, })
 end
 
+--- Resumes debugged program, if in a suspended state.
+function P.resume()
+    P._stopped = false
+end
+
+---@return boolean
+function P.isStopped()
+    return P._stopped
+end
 
 
 -- debug specific
 
 function P._debugHook(event, line)
-    -- update stacktrace
-    
-    local stack_trace_update_event = {
-        type = event,
-        line = line,
-    }
-
-    if event == 'call' or event == 'tail call' then
-        local stack_info = debug.getinfo(2, 'nlS')
-        local new_stack_frame = {
-            name = stack_info.name,
-            source = {
-                path = SourceMapper.mapInstalled(stack_info.short_src)
-            },
-            line = stack_info.currentline,
-            -- column has to be specified here, but the debugger does not currently support detecting where in the line we are stopped,
-            -- so we just say its always at the start of the line.
-            column = 1
-        }
-
-        new_stack_frame.is_tail_call = event == 'tail call'
-
-        if not new_stack_frame.source.path then
-            -- source was unable to map to a source location.
-            new_stack_frame.source.path = stack_info.short_src
-        end
-
-        if not new_stack_frame.name then
-            if event == 'call' then
-                new_stack_frame.name = '(main)'
-            elseif event == 'tail call' then
-                new_stack_frame.name = P.stacktrace[#P.stacktrace].name
-            end
-        end
-
-        stack_trace_update_event.name = new_stack_frame.name
-        stack_trace_update_event.source = new_stack_frame.source.path
-        stack_trace_update_event.line = new_stack_frame.line
-
-        table.insert(P.stacktrace, #P.stacktrace + 1, new_stack_frame)
-    elseif event == 'line' and #P.stacktrace > 0 then
-        P.stacktrace[#P.stacktrace].line = line
-    elseif event == 'return' then
-        local was_tail_call = true
-        while #P.stacktrace > 0 and was_tail_call do
-            was_tail_call =  P.stacktrace[#P.stacktrace].is_tail_call
-            table.remove(P.stacktrace, #P.stacktrace)
+    -- handle any new client requests.
+    for _, handler in ipairs(P.handlers) do
+        if type(handler.onDebugHook) == 'function' then
+            handler.onDebugHook(event, line)
         end
     end
-
-    -- we will be unable to communicate with the client if we hit an error,
-    -- so we supply an additional stackTraceUpdate event, which the client can handle,
-    -- so it can keep track of the current stacktrace and not rely on the StackTraceRequest.
-    P.event('stackTraceUpdate', stack_trace_update_event)
-
-    -- handle any new client requests.
 
     while P.pipe_ws:hasMessage() do
         P.handleMessage(JsonWS.receiveJson(P.pipe_ws))
     end
 
-    -- check if file has breakpoints
-
-    local file_info = debug.getinfo(2, "nS")
-    
-    local src_key = app.fs.normalizePath(file_info.source:sub(2))
-
-    if file_info.source:sub(1, 1) ~= '@' or not BreakpointHandler.breakpoints[src_key] then
-        return
-    end
-
-    -- check if current line is a breakpoint
-
-    if event == 'line' and BreakpointHandler.breakpoints[src_key][line] then
-        P.stop('breakpoint')
-        
+    if P._stopped then
         for _, handler in ipairs(P.handlers) do
             if type(handler.onStop) == 'function' then
                 handler.onStop()

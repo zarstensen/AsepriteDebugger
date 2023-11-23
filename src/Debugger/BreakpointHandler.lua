@@ -7,9 +7,6 @@ local SourceMapper = require 'SourceMapper'
 --- so in order to check if the source file 's' has a breakpoint at line number 'l',
 --- one should check if breakpoints[s][l] is nil, where s is the normalized source file path (app.fs.normalizePath).
 local P = {
-    -- debug.getInfo -[1]-> onStop -[2]-> debugHook -[3]-> relevant code.
-    DEPTH_OFFSET = 3,
-
     curr_breakpoint_id = 0,
     breakpoints = {},
 }
@@ -18,7 +15,23 @@ local P = {
 ---@param handles table<fun(request: table, response: table, args: table), boolean>
 function P.register(handles)
     handles[P.setBreakpoints] = true
-    handles[P.stackTrace] = true
+end
+
+function P.onDebugHook(event, line)
+    -- check if file has breakpoints
+
+    local file_info = debug.getinfo(ASEDEB.Debugger.HANDLER_DEPTH_OFFSET, "nS")
+    
+    local src_key = app.fs.normalizePath(file_info.source:sub(2))
+
+    if file_info.source:sub(1, 1) ~= '@' or not P.breakpoints[src_key] then
+        return
+    end
+
+    -- check if current line is a breakpoint
+    if event == 'line' and P.breakpoints[src_key][line] then
+        ASEDEB.Debugger.stop('breakpoint')
+    end
 end
 
 ---@param args table
@@ -56,48 +69,7 @@ function P.setBreakpoints(args, response)
     response:send(response_body)
 end
 
---- Simply convert the current stacktrace stored at Debugger.stacktrace to a valid debug adapter stacktrace response.
----@param args table
----@param response Response
-function P.stackTrace(args, response)
-    local stackframes = { }
 
-    if args.levels and args.levels <= 0 then
-        args.levels = nil
-    end
-
-    local start_frame = args.startFrame or 0
-    local frame_count = args.levels or 1000
-
-    local tail_call_count = 0
-
-    for i=1,math.min(start_frame + frame_count, #ASEDEB.Debugger.stacktrace) do
-        local stackframe_id = i - 1
-        local deb_stackframe = ASEDEB.Debugger.stacktrace[#ASEDEB.Debugger.stacktrace - stackframe_id]
-        
-        if i >= start_frame + 1 and i <= start_frame + frame_count then
-            local stackframe = {
-                name = deb_stackframe.name,
-                source = deb_stackframe.source,
-                line = deb_stackframe.line,
-                column = deb_stackframe.column
-            }
-            
-            stackframe.id = stackframe_id - tail_call_count
-            table.insert(stackframes, stackframe)
-        end
-            
-        if deb_stackframe.is_tail_call then
-            tail_call_count = tail_call_count + 1
-        end
-
-    end
-
-    response:send({
-        stackFrames = stackframes,
-        totalFrames = #ASEDEB.Debugger.stacktrace
-    })
-end
 
 --- Returns a line in the passed file, which contains lua code.
 --- The line is guaranteed to be the closest valid breakpoint line, after or at the passed line.

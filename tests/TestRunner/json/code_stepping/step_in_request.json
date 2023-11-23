@@ -1,0 +1,6 @@
+{
+  "command": "stepIn",
+  "arguments": {
+    "threadId": 1
+  }
+}

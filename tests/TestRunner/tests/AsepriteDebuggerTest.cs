@@ -400,6 +400,65 @@ namespace Debugger
 
         });
 
+        [Fact]
+        public async Task codeStepping() => await testAsepriteDebugger(timeout: 30, "code_stepping.lua", async ws =>
+        {
+            await beginInitializeDebugger(ws);
+            await setBreakpoints(ws, "code_stepping.lua", new List<int> { 19, 12 });
+            await endInitializeDebugger(ws);
+
+            await receiveNextEvent(ws, "stopped");
+
+            await sendWebsocketJson(ws, parseRequest("code_stepping/step_in_request.json"));
+            await receiveNextResponse(ws, "stepIn");
+
+            wsAssertEq("step", (await receiveNextEvent(ws, "stopped"))?["body"]?.Value<string>("reason"));
+
+            await sendWebsocketJson(ws, parseRequest("stacktrace_request.json"));
+            wsAssertEq(5, 
+                (await receiveNextResponse(ws, "stackTrace"))?["body"]?["stackFrames"]?[0]
+                ?.Value<int>("line"));
+
+            await sendWebsocketJson(ws, parseRequest("code_stepping/step_out_request.json"));
+            await receiveNextResponse(ws, "stepOut");
+
+            wsAssertEq("step", (await receiveNextEvent(ws, "stopped"))?["body"]?.Value<string>("reason"));
+
+            await sendWebsocketJson(ws, parseRequest("stacktrace_request.json"));
+            wsAssertEq(20,
+                (await receiveNextResponse(ws, "stackTrace"))?["body"]?["stackFrames"]?[0]
+                ?.Value<int>("line"));
+
+            await sendWebsocketJson(ws, parseRequest("code_stepping/next_request.json"));
+            await receiveNextResponse(ws, "next");
+
+            wsAssertEq("step", (await receiveNextEvent(ws, "stopped"))?["body"]?.Value<string>("reason"));
+
+            await sendWebsocketJson(ws, parseRequest("stacktrace_request.json"));
+            wsAssertEq(21,
+                (await receiveNextResponse(ws, "stackTrace"))?["body"]?["stackFrames"]?[0]
+                ?.Value<int>("line"));
+
+            await sendWebsocketJson(ws, parseRequest("continue_request.json"));
+            await receiveNextResponse(ws, "continue");
+            
+            // tail calls
+
+            await sendWebsocketJson(ws, parseRequest("code_stepping/step_out_request.json"));
+            await receiveNextResponse(ws, "stepOut");
+
+            wsAssertEq("step", (await receiveNextEvent(ws, "stopped"))?["body"]?.Value<string>("reason"));
+
+            await sendWebsocketJson(ws, parseRequest("stacktrace_request.json"));
+            wsAssertEq(22,
+                (await receiveNextResponse(ws, "stackTrace"))?["body"]?["stackFrames"]?[0]
+                ?.Value<int>("line"));
+
+            await sendWebsocketJson(ws, parseRequest("continue_request.json"));
+            await receiveNextResponse(ws, "continue");
+
+        });
+
         #endregion
 
         #region helpers

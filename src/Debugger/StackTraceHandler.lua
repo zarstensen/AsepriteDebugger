@@ -67,7 +67,7 @@ function P.onDebugHook(event, line)
     }
 
     if event == 'call' or event == 'tail call' then
-        local stack_info = debug.getinfo(2, 'nlS')
+        local stack_info = debug.getinfo(ASEDEB.Debugger.HANDLER_DEPTH_OFFSET, 'nlS')
         local new_stack_frame = {
             name = stack_info.name,
             source = {

@@ -3,6 +3,7 @@ local Response = require 'Response'
 local BreakpointHandler = require 'BreakpointHandler'
 local VariableHandler = require 'VariableHandler'
 local StackTraceHandler = require 'StackTraceHandler'
+local StepHandler = require 'StepHandler'
 
 ---@class Debugger
 ---@field handles table<fun(request: table, response: table, args: table), boolean>
@@ -11,6 +12,9 @@ local StackTraceHandler = require 'StackTraceHandler'
 --- and registers all of its requests handles.
 --- Each handler class can optionally implement an onStop and onContinue function, which take no parameters,
 --- and are called whenever a stop event occurs or an continue / step request is received.
+--- Each handler class can optionally implement an onDebugHook function, which is called any time the debuggers debug hook is fired.
+--- the current event and optionally line will be passed to this function.
+--- onDebugHook is called before any new requests from the client is handled.
 local P = {
     ERR_NIL = 1,
     ERR_NOT_IMPLEMENTED = 2,
@@ -18,8 +22,11 @@ local P = {
 
     THREAD_ID = 1,
 
+    -- debug.getInfo -[1]-> onStop -[2]-> debugHook -[3]-> relevant code.
+    HANDLER_DEPTH_OFFSET = 3,
+
     handles = { },
-    handlers = { BreakpointHandler, VariableHandler, StackTraceHandler },
+    handlers = { BreakpointHandler, VariableHandler, StackTraceHandler, StepHandler },
     
     curr_stack_depth = 0,
     _curr_seq = 1,
@@ -201,6 +208,15 @@ function P.stop(reason, description)
     P.event('stopped', { reason = reason, description = description, threadId = P.THREAD_ID, })
 end
 
+--- Resumes debugged program, if in a suspended state.
+function P.resume()
+    P._stopped = false
+end
+
+---@return boolean
+function P.isStopped()
+    return P._stopped
+end
 
 
 -- debug specific

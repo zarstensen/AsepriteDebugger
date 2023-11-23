@@ -7,9 +7,6 @@ local SourceMapper = require 'SourceMapper'
 --- so in order to check if the source file 's' has a breakpoint at line number 'l',
 --- one should check if breakpoints[s][l] is nil, where s is the normalized source file path (app.fs.normalizePath).
 local P = {
-    -- debug.getInfo -[1]-> onStop -[2]-> debugHook -[3]-> relevant code.
-    DEPTH_OFFSET = 3,
-
     curr_breakpoint_id = 0,
     breakpoints = {},
 }
@@ -23,7 +20,7 @@ end
 function P.onDebugHook(event, line)
     -- check if file has breakpoints
 
-    local file_info = debug.getinfo(P.DEPTH_OFFSET, "nS")
+    local file_info = debug.getinfo(ASEDEB.Debugger.HANDLER_DEPTH_OFFSET, "nS")
     
     local src_key = app.fs.normalizePath(file_info.source:sub(2))
 

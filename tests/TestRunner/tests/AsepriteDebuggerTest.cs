@@ -181,51 +181,11 @@ namespace Debugger
 
         });
 
-        /// <summary>
-        /// Test if the debugger responds correctly to an initialize request.
-        /// </summary>
-        [Fact]
-        public async Task initializeDebugger() => await testAsepriteDebugger(timeout: 30, "initialize_test.lua", async ws =>
-        {
-            server_state = "Connected";
-            JObject initialize_request = parseRequest("initialize_request.json");
-
-            await sendWebsocketJson(ws, initialize_request);
-
-            server_state = "Waiting for response";
-
-            JObject response = await receiveNextResponse(ws, "initialize");
-
-            server_state = "Received response";
-            JObject expected_response = parseResponse("initialize_test/initialize_response.json", initialize_request, true);
-
-            wsAssertEq(expected_response, response, "Response did not match expected response.", comparer: JToken.DeepEquals);
-
-
-            server_state = "Waiting for event";
-            await receiveNextEvent(ws, "initialized");
-            server_state = "Received event";
-
-            await sendWebsocketJson(ws, parseRequest("launch_request.json"));
-            await receiveNextResponse(ws, "launch");
-
-            await sendWebsocketJson(ws, parseRequest("configdone_request.json"));
-            await receiveNextResponse(ws, "configurationDone");
-
-        });
-
         [Fact]
         public async Task terminateEvent() => await testAsepriteDebugger(timeout: 30, "terminate_test.lua", async ws =>
         {
-            await sendWebsocketJson(ws, parseRequest("initialize_request.json"));
-            await receiveNextResponse(ws, "initialize");
-            await receiveNextEvent(ws, "initialized");
-
-            await sendWebsocketJson(ws, parseRequest("launch_request.json"));
-            await receiveNextResponse(ws, "launch");
-
-            await sendWebsocketJson(ws, parseRequest("configdone_request.json"));
-            await receiveNextResponse(ws, "configurationDone");
+            await beginInitializeDebugger(ws);
+            await endInitializeDebugger(ws);
 
             // previous version of this test shutdown aseprite here,
             // however this does not call the debugger extensions exit function when run with xvfb,
@@ -240,20 +200,11 @@ namespace Debugger
         [Fact]
         public async Task settingAndHittingBreakpoints() => await testAsepriteDebugger(timeout: 30, "breakpoints_test.lua", async ws =>
         {
-            await sendWebsocketJson(ws, parseRequest("initialize_request.json"));
-            await receiveNextResponse(ws, "initialize", true);
-
-            JObject breakpoints_request = parseRequest("breakpoint_test/set_breakpoints_request.json");
-
-            // source path needs to be absolute path, so it needs to be set in code.
-            breakpoints_request["arguments"]!["source"] = JObject.Parse($"{{ \"path\": \"{new FileInfo($"Debugger/tests/breakpoints_test.lua").FullName.Replace(@"\", @"\\")}\" }}");
-
+            await beginInitializeDebugger(ws);
+            
             // set breakpoints
 
-            server_state = "Sent breakpoints request";
-            await sendWebsocketJson(ws, breakpoints_request);
-            JObject breakpoints_response = await receiveNextResponse(ws, "setBreakpoints");
-            server_state = "Received breakpoints response";
+            JObject breakpoints_response = await setBreakpoints(ws, "breakpoints_test.lua", new List<int> { 8, 11, 18 });
 
             // check breakpoints were set correctly
 
@@ -263,15 +214,7 @@ namespace Debugger
             wsAssertEq(11, breakpoints_response["body"]?["breakpoints"]?[1]?["line"], "Breakpoint placement was unexpected.");
             wsAssertEq(18, breakpoints_response["body"]?["breakpoints"]?[2]?["line"], "Breakpoint placement was unexpected.");
 
-            server_state = "Sent launch request";
-            await sendWebsocketJson(ws, parseRequest("launch_request.json"));
-            await receiveNextResponse(ws, "launch");
-            server_state = "Received launch response";
-
-            server_state = "Sent configdone request";
-            await sendWebsocketJson(ws, parseRequest("configdone_request.json"));
-            await receiveNextResponse(ws, "configurationDone");
-            server_state = "Received configdone response";
+            await endInitializeDebugger(ws);
 
             // check breakpoints are hit
 
@@ -287,22 +230,11 @@ namespace Debugger
         [Fact]
         public async Task evaluateExpression() => await testAsepriteDebugger(timeout: 30, "evaluate_test.lua", async ws =>
         {
-            await sendWebsocketJson(ws, parseRequest("initialize_request.json"));
-            await receiveNextResponse(ws, "initialize", true);
+            await beginInitializeDebugger(ws);
 
-            await sendWebsocketJson(ws, parseRequest("launch_request.json"));
-            await receiveNextResponse(ws, "launch");
+            await setBreakpoints(ws, "evaluate_test.lua", new List<int> { 6 });
 
-            JObject breakpoints_request = parseRequest("evaluate_test/set_breakpoints_request.json");
-
-            // source path needs to be absolute path, so it needs to be set in code.
-            breakpoints_request["arguments"]!["source"] = JObject.Parse($"{{ \"path\": \"{new FileInfo($"Debugger/tests/evaluate_test.lua").FullName.Replace(@"\", @"\\")}\" }}");
-
-            await sendWebsocketJson(ws, breakpoints_request);
-            await receiveNextResponse(ws, "setBreakpoints");
-
-            await sendWebsocketJson(ws, parseRequest("configdone_request.json"));
-            await receiveNextResponse(ws, "configurationDone");
+            await endInitializeDebugger(ws);
 
             await receiveNextEvent(ws, "stopped");
 
@@ -323,22 +255,11 @@ namespace Debugger
         [Fact]
         public async Task retreivingVariables() => await testAsepriteDebugger(timeout: 30, "variables_test.lua", async ws =>
         {
-            await sendWebsocketJson(ws, parseRequest("initialize_request.json"));
-            await receiveNextResponse(ws, "initialize", true);
+            await beginInitializeDebugger(ws);
 
-            await sendWebsocketJson(ws, parseRequest("launch_request.json"));
-            await receiveNextResponse(ws, "launch");
+            await setBreakpoints(ws, "variables_test.lua", new List<int> { 15 });
 
-            JObject breakpoints_request = parseRequest("variables_test/set_breakpoints_request.json");
-
-            // source path needs to be absolute path, so it needs to be set in code.
-            breakpoints_request["arguments"]!["source"] = JObject.Parse($"{{ \"path\": \"{new FileInfo($"Debugger/tests/variables_test.lua").FullName.Replace(@"\", @"\\")}\" }}");
-
-            await sendWebsocketJson(ws, breakpoints_request);
-            await receiveNextResponse(ws, "setBreakpoints");
-
-            await sendWebsocketJson(ws, parseRequest("configdone_request.json"));
-            await receiveNextResponse(ws, "configurationDone");
+            await endInitializeDebugger(ws);
 
             await receiveNextEvent(ws, "stopped");
 
@@ -788,6 +709,45 @@ namespace Debugger
             event_obj["seq"] = debugger_seq++;
 
             return event_obj;
+        }
+
+        private async Task beginInitializeDebugger(WebSocket ws)
+        {
+            JObject initialize_request = parseRequest("initialize_request.json");
+
+            await sendWebsocketJson(ws, initialize_request);
+
+            JObject response = await receiveNextResponse(ws, "initialize");
+
+            // TODO: should probably not test the exact capabilities here?
+            JObject expected_response = parseResponse("initialize_test/initialize_response.json", initialize_request, true);
+
+            wsAssertEq(expected_response, response, "Response did not match expected response.", comparer: JToken.DeepEquals);
+
+            await receiveNextEvent(ws, "initialized");
+
+            await sendWebsocketJson(ws, parseRequest("launch_request.json"));
+            await receiveNextResponse(ws, "launch");
+        }
+
+        private async Task endInitializeDebugger(WebSocket ws)
+        {
+            await sendWebsocketJson(ws, parseRequest("configdone_request.json"));
+            await receiveNextResponse(ws, "configurationDone");
+        }
+
+        private async Task<JObject> setBreakpoints(WebSocket ws, string script, List<int> lines)
+        {
+            JObject breakpoints_request = parseRequest("set_breakpoints_request.json");
+
+            // source path needs to be absolute path, so it needs to be set in code.
+            breakpoints_request["arguments"]!["source"] = JObject.Parse($"{{ \"path\": \"{new FileInfo($"Debugger/tests/{script}").FullName.Replace(@"\", @"\\")}\" }}");
+            
+            foreach(int line in lines)
+                breakpoints_request["arguments"]!.Value<JArray>("breakpoints")!.Add(JObject.Parse($"{{ \"line\": {line} }}"));
+
+            await sendWebsocketJson(ws, breakpoints_request);
+            return await receiveNextResponse(ws, "setBreakpoints");
         }
 
         #endregion

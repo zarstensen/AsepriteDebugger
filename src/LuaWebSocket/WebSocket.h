@@ -36,7 +36,8 @@ public:
 	/// @brief Send the passed string to the client, as a text message.
 	/// undefined behaviour if isConnected() is false.
 	inline void send(const std::string& msg)
-		{ m_connection->send(msg); }
+		// void* overload does not set compression, so we use this workaround to avoid unnecessary overhead on localhost connections.
+		{ m_connection->send(static_cast<const void*>(msg.c_str()), msg.size()); }
 
 	/// @brief Returns the the earliest message received from the websocket server connection,
 	/// which has not yet allready been received with this method.

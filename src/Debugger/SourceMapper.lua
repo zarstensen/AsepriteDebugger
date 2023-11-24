@@ -2,37 +2,44 @@
 ---@class SourceMapper
 local P = { }
 
---- Maps the passed source file, to its actual installed location in the aseprite user cofig directory.
---- If the file is not part of the installed source code, nil is returned instead.
----@param src any
+--- Maps the passed root directory of the given path, to the passed target root directory.
+--- if the path does not live in the passed root directory, nil is returned.
+---
+--- Example:
+---     path = foo/bar/file.txt
+---     root_dir = foo/bar/
+---     target_root_dir = foobar/
+---
+---     > P.map(path, root_dir, target_root_dir)
+---       foobar/file.txt 
+---
+---@param path string
+---@param root_dir string
+--- @param target_root_dir string
 ---@return string | nil
-function P.mapSource(src)
-    local source_dir = app.fs.normalizePath(ASEDEB.config.source_dir)
-    local install_dir = app.fs.normalizePath(ASEDEB.config.install_dir)
+function P.map(path, root_dir, target_root_dir)
+    root_dir = app.fs.normalizePath(root_dir)
+    target_root_dir = app.fs.normalizePath(target_root_dir)
     
-    local _, end_src_dir_index = src:find(source_dir, 1, true)
+    local _, end_src_dir_index = path:find(root_dir, 1, true)
 
     if end_src_dir_index == nil then
         return nil
     end
 
-    return app.fs.normalizePath(app.fs.joinPath(install_dir, src:sub(end_src_dir_index + 1)))
-end
+    local mapped_src = target_root_dir
 
---- Maps the passed installed source file to its original source code location.
----@param isntall_src any
----@return string | nil
-function P.mapInstalled(isntall_src)
-    local source_dir = app.fs.normalizePath(ASEDEB.config.source_dir)
-    local install_dir = app.fs.normalizePath(ASEDEB.config.install_dir)
-    
-    local _, end_install_dir_index = isntall_src:find(install_dir, 1, true)
-
-    if end_install_dir_index == nil then
-        return nil
+    -- if the source is a script, then the end_src_dir_index will be equal to the length of src,
+    -- which means the substring returned will be empty.
+    -- If the second argument of app.fs.joinPath is empty, the path passed as the first argument is converted to a folder,
+    -- however we want to retain its file status, as it is a script path, which points directly to the file,
+    -- instead of a folder containing all of the source code.
+    -- therefore we perform this check here.
+    if end_src_dir_index < #path then
+        mapped_src = app.fs.joinPath(target_root_dir, path:sub(end_src_dir_index + 1))
     end
 
-    return app.fs.normalizePath(app.fs.joinPath(source_dir, isntall_src:sub(end_install_dir_index + 1)))
+    return app.fs.normalizePath(mapped_src)
 end
 
 return P

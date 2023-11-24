@@ -19,6 +19,7 @@ local P = {
     ERR_NIL = 1,
     ERR_NOT_IMPLEMENTED = 2,
     ERR_EVALUATION_FAILED = 3,
+    ERR_INVALID_SRC_FILE = 4,
 
     THREAD_ID = 1,
 

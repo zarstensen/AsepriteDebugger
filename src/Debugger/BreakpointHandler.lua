@@ -40,10 +40,11 @@ function P.setBreakpoints(args, response)
     -- all paths need to point to the actual installed location in the aseprite user config folder,
     -- as we use these files to check for breakpoint validity.
     local response_body = { breakpoints = { } }
-    local mapped_source = SourceMapper.mapSource(args.source.path)
+    local mapped_source = SourceMapper.map(args.source.path, ASEDEB.config.install_dir, ASEDEB.config.source_dir)
 
     if mapped_source == nil then
-        response:send(response_body)
+        response:sendError(ASEDEB.Debugger.ERR_INVALID_SRC_FILE, 'Invalid Source',
+            string.format("The path '%s' could not be mapped to a corresponding source file.", args.source.path))
         return
     end
 

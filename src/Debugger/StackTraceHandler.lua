@@ -11,6 +11,7 @@ local P = {
 ---@param handles table<fun(request: table, response: table, args: table), boolean>
 function P.register(handles)
     handles[P.stackTrace] = true
+    handles[P.source] = true
 end
 
 --- Simply convert the current stacktrace stored at Debugger.stacktrace to a valid debug adapter stacktrace response.
@@ -56,6 +57,12 @@ function P.stackTrace(args, response)
     })
 end
 
+---@param args table
+---@param response Response
+function P.source(args, response)
+    response:send({ content = "External Source File" })
+end
+
 ---@param event string
 ---@param line number | nil
 function P.onDebugHook(event, line)
@@ -71,7 +78,7 @@ function P.onDebugHook(event, line)
         local new_stack_frame = {
             name = stack_info.name,
             source = {
-                path = SourceMapper.mapInstalled(stack_info.short_src)
+                path = SourceMapper.map(stack_info.short_src, ASEDEB.config.install_dir, ASEDEB.config.source_dir)
             },
             line = stack_info.currentline,
             -- column has to be specified here, but the debugger does not currently support detecting where in the line we are stopped,

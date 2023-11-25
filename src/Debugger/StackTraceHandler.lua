@@ -63,6 +63,14 @@ function P.source(args, response)
     response:send({ content = "External Source File" })
 end
 
+function P.popStackFrame()
+    local was_tail_call = true
+    while #P.stacktrace > 0 and was_tail_call do
+        was_tail_call =  P.stacktrace[#P.stacktrace].is_tail_call
+        table.remove(P.stacktrace, #P.stacktrace)
+    end
+end
+
 ---@param event string
 ---@param line number | nil
 function P.onDebugHook(event, line)
@@ -109,11 +117,7 @@ function P.onDebugHook(event, line)
     elseif event == 'line' and #P.stacktrace > 0 then
         P.stacktrace[#P.stacktrace].line = line
     elseif event == 'return' then
-        local was_tail_call = true
-        while #P.stacktrace > 0 and was_tail_call do
-            was_tail_call =  P.stacktrace[#P.stacktrace].is_tail_call
-            table.remove(P.stacktrace, #P.stacktrace)
-        end
+        P.popStackFrame()
     end
 
     -- we will be unable to communicate with the client if we hit an error,

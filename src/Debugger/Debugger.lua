@@ -4,6 +4,7 @@ local BreakpointHandler = require 'BreakpointHandler'
 local VariableHandler = require 'VariableHandler'
 local StackTraceHandler = require 'StackTraceHandler'
 local StepHandler = require 'StepHandler'
+local ErrorHandler = require 'ErrorHandler'
 
 ---@class Debugger
 ---@field handles table<fun(request: table, response: table, args: table), boolean>
@@ -27,7 +28,7 @@ local P = {
     HANDLER_DEPTH_OFFSET = 3,
 
     handles = { },
-    handlers = { BreakpointHandler, VariableHandler, StackTraceHandler, StepHandler },
+    handlers = { BreakpointHandler, VariableHandler, StackTraceHandler, StepHandler, ErrorHandler },
     
     curr_stack_depth = 0,
     _curr_seq = 1,
@@ -204,9 +205,18 @@ end
 --- Sends an stop event to the connected debug adapter, and registers in the debugger that it is currently stopped.
 ---@param reason string
 ---@param description string | nil
-function P.stop(reason, description)
+---@param additional_info table | nil
+function P.stop(reason, description, additional_info)
     P._stopped = true
-    P.event('stopped', { reason = reason, description = description, threadId = P.THREAD_ID, })
+    additional_info = additional_info or { }
+
+    local body = { reason = reason, description = description, threadId = P.THREAD_ID }
+
+    for k, v in pairs(additional_info) do
+        body[k] = v
+    end
+
+    P.event('stopped', body)
 end
 
 --- Resumes debugged program, if in a suspended state.
@@ -218,7 +228,6 @@ end
 function P.isStopped()
     return P._stopped
 end
-
 
 -- debug specific
 

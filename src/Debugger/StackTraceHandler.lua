@@ -63,12 +63,18 @@ function P.source(args, response)
     response:send({ content = "External Source File" })
 end
 
+---@return number pop_count number of popped stack frames.
 function P.popStackFrame()
+    local pop_count = 0
     local was_tail_call = true
+
     while #P.stacktrace > 0 and was_tail_call do
         was_tail_call =  P.stacktrace[#P.stacktrace].is_tail_call
         table.remove(P.stacktrace, #P.stacktrace)
+        pop_count = pop_count + 1
     end
+
+    return pop_count
 end
 
 ---@param event string
@@ -104,7 +110,7 @@ function P.onDebugHook(event, line)
         end
 
         if not new_stack_frame.name then
-            if event == 'call' then
+            if event == 'call' and #P.stacktrace == 0 then
                 new_stack_frame.name = '(main)'
             elseif event == 'tail call' then
                 new_stack_frame.name = P.stacktrace[#P.stacktrace].name
@@ -119,7 +125,42 @@ function P.onDebugHook(event, line)
     elseif event == 'line' and #P.stacktrace > 0 then
         P.stacktrace[#P.stacktrace].line = line
     elseif event == 'return' then
-        P.popStackFrame()
+
+        if #P.stacktrace <= 0 then
+            return
+        end
+        -- check if calls and returns are balanced, otherwise a pcall / xpcall might have catched an error.
+        local func = debug.getinfo(ASEDEB.Debugger.HANDLER_DEPTH_OFFSET, 'f').func
+
+        -- TODO: what if pcall is reassigned?
+        -- not really likely though.
+
+        if not func or func == P.stacktrace[#P.stacktrace].func then
+            stack_trace_update_event.pop_count = P.popStackFrame()
+        elseif func == pcall or func == xpcall then
+            -- lua state will have jumped to the most recent pcall,
+            -- so we need to do the same for the stacktrace.
+
+            stack_trace_update_event.pop_count = 0
+
+            local frame_func = P.stacktrace[#P.stacktrace].func
+
+            while frame_func ~= pcall and frame_func ~= xpcall and #P.stacktrace > 0 do
+                stack_trace_update_event.pop_count = stack_trace_update_event.pop_count + P.popStackFrame()
+
+                frame_func = P.stacktrace[#P.stacktrace].func
+            end
+
+            if #P.stacktrace == 0 then
+                -- TODO: error here.
+                return
+            end
+
+            stack_trace_update_event.pop_count = stack_trace_update_event.pop_count + P.popStackFrame()
+        else
+            -- TODO: error here.
+        end
+
     end
 
     -- we will be unable to communicate with the client if we hit an error,

@@ -404,7 +404,7 @@ namespace Debugger
         public async Task codeStepping() => await testAsepriteDebugger(timeout: 30, "code_stepping.lua", async ws =>
         {
             await beginInitializeDebugger(ws);
-            await setBreakpoints(ws, "code_stepping.lua", new List<int> { 19, 12 });
+            await setBreakpoints(ws, "code_stepping.lua", new List<int> { 28, 21 });
             await endInitializeDebugger(ws);
 
             await receiveNextEvent(ws, "stopped");
@@ -415,7 +415,7 @@ namespace Debugger
             wsAssertEq("step", (await receiveNextEvent(ws, "stopped"))?["body"]?.Value<string>("reason"));
 
             await sendWebsocketJson(ws, parseRequest("stacktrace_request.json"));
-            wsAssertEq(5, 
+            wsAssertEq(14, 
                 (await receiveNextResponse(ws, "stackTrace"))?["body"]?["stackFrames"]?[0]
                 ?.Value<int>("line"));
 
@@ -425,7 +425,7 @@ namespace Debugger
             wsAssertEq("step", (await receiveNextEvent(ws, "stopped"))?["body"]?.Value<string>("reason"));
 
             await sendWebsocketJson(ws, parseRequest("stacktrace_request.json"));
-            wsAssertEq(20,
+            wsAssertEq(29,
                 (await receiveNextResponse(ws, "stackTrace"))?["body"]?["stackFrames"]?[0]
                 ?.Value<int>("line"));
 
@@ -435,7 +435,7 @@ namespace Debugger
             wsAssertEq("step", (await receiveNextEvent(ws, "stopped"))?["body"]?.Value<string>("reason"));
 
             await sendWebsocketJson(ws, parseRequest("stacktrace_request.json"));
-            wsAssertEq(21,
+            wsAssertEq(30,
                 (await receiveNextResponse(ws, "stackTrace"))?["body"]?["stackFrames"]?[0]
                 ?.Value<int>("line"));
 
@@ -452,13 +452,48 @@ namespace Debugger
             wsAssertEq("step", (await receiveNextEvent(ws, "stopped"))?["body"]?.Value<string>("reason"));
 
             await sendWebsocketJson(ws, parseRequest("stacktrace_request.json"));
-            wsAssertEq(22,
+            wsAssertEq(31,
+                (await receiveNextResponse(ws, "stackTrace"))?["body"]?["stackFrames"]?[0]
+                ?.Value<int>("line"));
+
+            // pcall
+
+            await sendWebsocketJson(ws, parseRequest("code_stepping/next_request.json"));
+            await receiveNextResponse(ws, "next");
+
+            wsAssertEq("step", (await receiveNextEvent(ws, "stopped"))?["body"]?.Value<string>("reason"));
+
+            await sendWebsocketJson(ws, parseRequest("stacktrace_request.json"));
+            wsAssertEq(32,
                 (await receiveNextResponse(ws, "stackTrace"))?["body"]?["stackFrames"]?[0]
                 ?.Value<int>("line"));
 
             await sendWebsocketJson(ws, parseRequest("continue_request.json"));
             await receiveNextResponse(ws, "continue");
 
+        });
+
+        [Fact]
+        public async Task errorHandling() => await testAsepriteDebugger(timeout: 5, "error_test.lua", report_errors: false, test_func: async ws =>
+        {
+            await beginInitializeDebugger(ws);
+            await endInitializeDebugger(ws);
+
+            JObject json_event = await receiveNextEvent(ws, "stopped");
+
+            wsAssertEq("exception", json_event?["body"]?.Value<string>("reason"));
+            wsAssertEq("error", json_event?["body"]?.Value<string>("description"));
+
+            await sendWebsocketJson(ws, parseRequest("error_test/exception_info_request.json"));
+            JObject exception_info_response = await receiveNextResponse(ws, "exceptionInfo");
+
+            wsAssertEq("error", exception_info_response?["body"]?.Value<string>("exceptionId"));
+
+            await sendWebsocketJson(ws, parseRequest("continue_request.json"));
+            await receiveNextResponse(ws, "continue");
+
+            await receiveNextEvent(ws, "terminated");
+            fail_on_timeout = false;
         });
 
         #endregion
@@ -477,13 +512,13 @@ namespace Debugger
         /// <param name="test_script"> lua script to run when starting aseprite. </param>
         /// <param name="timeout"> how long before test auto fails. </param>
         /// <param name="test_func"> c# function to run, when a websocket has connected to the mock debug adapter. </param>
-        private async Task testAsepriteDebugger(double timeout, string test_script, MockDebugAdapter test_func, bool no_websocket_logging = true)
+        private async Task testAsepriteDebugger(double timeout, string test_script, MockDebugAdapter test_func, bool no_websocket_logging = true, bool report_errors = true)
         {
             Assert.True(File.Exists(Path.Join("Debugger/tests", test_script)), $"Could not find test script: {Path.Join("Debugger/tests", test_script)}");
 
             runMockDebugAdapter(test_func);
 
-            installDebugger(test_script, no_websocket_logging);
+            installDebugger(test_script, no_websocket_logging, report_errors);
 
             runAseprite();
 
@@ -553,7 +588,7 @@ namespace Debugger
         /// Installs the debugger extension at ASEPRITE_USER_FOLDER, and configures it to run the passed test script in test mode.
         /// </summary>
         /// <param name="test_script"></param>
-        private void installDebugger(string test_script, bool websocket_logging)
+        private void installDebugger(string test_script, bool websocket_logging, bool report_errors)
         {
             // copy to extension directory.
 
@@ -583,6 +618,7 @@ namespace Debugger
             config["pipe_ws_path"] = new FileInfo("PipeWebSocket.exe").FullName;
             // since the scrit is run using the --script command line option, the source and install path will be equal.
             config["install_dir"] = config["source_dir"] = new DirectoryInfo($"Debugger/tests/").FullName;
+            config["report_errors"] = report_errors;
 
             File.WriteAllText(Path.Combine(dest_dir, "config.json"), config.ToString());
         }
@@ -644,9 +680,9 @@ namespace Debugger
         /// <summary>
         /// Receives the next message of passed type, discarding any other message types received.
         /// </summary>
-        private async Task<JObject> receiveNextResponse(WebSocket socket, string? expected_command = null, bool assert_on_failed = true, string? state_msg = null)
+        private async Task<JObject> receiveNextResponse(WebSocket socket, string? expected_command = null, bool assert_on_failed = true, string? state_msg = null, [CallerLineNumber] int line_number = 0)
         {
-            server_state = $"Waiting on '{expected_command}' response";
+            server_state = $"Waiting on '{expected_command}' response\nLine: {line_number}";
 
             if (state_msg != null)
                 server_state = $"{server_state}: {state_msg}";
@@ -658,26 +694,26 @@ namespace Debugger
                 response = await receiveWebsocketJson(socket);
             } while (response.Value<string>("type") != "response");
 
-            server_state = $"Received '{expected_command}' response";
+            server_state = $"Received '{expected_command}' response\nLine: {line_number}";
 
             if (state_msg != null)
-                server_state = $"{server_state}: {state_msg}";
+                server_state = $"{server_state}\n{state_msg}";
 
             if (assert_on_failed)
-                wsAssert(response.Value<bool>("success"), $"Did not receive successfull response:\n{response}");
+                wsAssert(response.Value<bool>("success"), $"Did not receive successfull response:\n{response}", line_number: line_number);
 
             if (expected_command != null)
-                wsAssertEq(expected_command, response.Value<string>("command"), $"Received unexpected command type:\n{response}");
+                wsAssertEq(expected_command, response.Value<string>("command"), $"Received unexpected command type:\n{response}", line_number: line_number);
 
             return response;
         }
 
-        private async Task<JObject> receiveNextEvent(WebSocket socket, string? expected_event = null, string? state_msg = null)
+        private async Task<JObject> receiveNextEvent(WebSocket socket, string? expected_event = null, string? state_msg = null, [CallerLineNumber] int line_number = 0)
         {
-            server_state = $"Waiting on '{expected_event}' event";
+            server_state = $"Waiting on '{expected_event}' event\nLine: {line_number}";
 
             if (state_msg != null)
-                server_state = $"{server_state}: {state_msg}";
+                server_state = $"{server_state}\n{state_msg}";
 
             JObject event_message;
 
@@ -686,13 +722,13 @@ namespace Debugger
                 event_message = await receiveWebsocketJson(socket);
             } while (event_message.Value<string>("type") != "event" || event_message.Value<string>("event") == "stackTraceUpdate");
 
-            server_state = $"Received '{expected_event}' event";
+            server_state = $"Received '{expected_event}' event\nLine: {line_number}";
 
             if (state_msg != null)
-                server_state = $"{server_state}: {state_msg}";
+                server_state = $"{server_state}\n{state_msg}";
 
             if (expected_event != null)
-                wsAssertEq(expected_event, event_message.Value<string>("event"), $"Received unexpected event type:\n{event_message}");
+                wsAssertEq(expected_event, event_message.Value<string>("event"), $"Received unexpected event type:\n{event_message}", line_number: line_number);
 
             return event_message;
         }

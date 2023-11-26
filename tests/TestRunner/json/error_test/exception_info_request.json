@@ -1,0 +1,6 @@
+{
+  "command": "exceptionInfo",
+  "arguments": {
+    "threadId": 1
+  }
+}

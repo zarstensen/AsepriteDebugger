@@ -81,11 +81,7 @@ end
 ---@param line number | nil
 function P.onDebugHook(event, line)
     -- update stacktrace
-    
-    local stack_trace_update_event = {
-        type = event,
-        line = line,
-    }
+    local stack_trace_update_event = { }
 
     if event == 'call' or event == 'tail call' then
 
@@ -117,18 +113,25 @@ function P.onDebugHook(event, line)
             end
         end
 
+        stack_trace_update_event.action = 'push'
         stack_trace_update_event.name = new_stack_frame.name
         stack_trace_update_event.source = new_stack_frame.source.path
         stack_trace_update_event.line = new_stack_frame.line
 
         table.insert(P.stacktrace, #P.stacktrace + 1, new_stack_frame)
     elseif event == 'line' and #P.stacktrace > 0 then
+        stack_trace_update_event.action = 'update_line'
+        stack_trace_update_event.line = line
+
         P.stacktrace[#P.stacktrace].line = line
     elseif event == 'return' then
 
         if #P.stacktrace <= 0 then
             return
         end
+
+        stack_trace_update_event.action = 'pop'
+
         -- check if calls and returns are balanced, otherwise a pcall / xpcall might have catched an error.
         local func = debug.getinfo(ASEDEB.Debugger.HANDLER_DEPTH_OFFSET, 'f').func
 

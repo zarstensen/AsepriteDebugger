@@ -29,7 +29,7 @@ function P.onDebugHook(event, line)
         for i=1,P.error_level + 2 do
             StackTraceHandler.popStackFrame()
         end
-        
+
         ASEDEB.Debugger.stop('exception', P.error_message, { allThreadsStopped = true })
     end
 end
@@ -57,16 +57,14 @@ end
 -- before propagating the error up the call stack.
 local orig_error = error
 function error(message, level)
-
     -- do not report error if pcall or xpcall exists in the call stack,
     -- since these will catch the error.
 
     local in_pcall = false
 
     for i, frame in ipairs(StackTraceHandler.stacktrace) do
-        if frame.name == 'pcall' or frame.name == 'xpcall' then
+        if frame.func == pcall or frame.func == xpcall then
             in_pcall = true
-            break
         end
     end
 

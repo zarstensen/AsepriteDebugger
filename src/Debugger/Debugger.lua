@@ -28,7 +28,7 @@ local P = {
     HANDLER_DEPTH_OFFSET = 3,
 
     handles = { },
-    handlers = { BreakpointHandler, VariableHandler, StackTraceHandler, StepHandler, ErrorHandler },
+    handlers = { StackTraceHandler, ErrorHandler, BreakpointHandler, VariableHandler, StepHandler },
     
     curr_stack_depth = 0,
     _curr_seq = 1,

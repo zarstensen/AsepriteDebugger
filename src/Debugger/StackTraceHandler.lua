@@ -82,8 +82,10 @@ function P.onDebugHook(event, line)
     }
 
     if event == 'call' or event == 'tail call' then
-        local stack_info = debug.getinfo(ASEDEB.Debugger.HANDLER_DEPTH_OFFSET, 'nlS')
+
+        local stack_info = debug.getinfo(ASEDEB.Debugger.HANDLER_DEPTH_OFFSET, 'nlSf')
         local new_stack_frame = {
+            func = stack_info.func,
             name = stack_info.name,
             source = {
                 path = SourceMapper.map(stack_info.short_src, ASEDEB.config.install_dir, ASEDEB.config.source_dir)

@@ -1,7 +1,5 @@
 local JsonWS = require 'JsonWS'
 
-print("OMG")
-
 local ws = LuaWebSocket()
 ws:connect(ASEDEB.config.endpoint)
 

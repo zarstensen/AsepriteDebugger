@@ -42,12 +42,11 @@ end
 
 
 -- use this pipe websocket to communicate failures and test ends.
-print("CON")
 ASEDEB.test_pipe_ws = LuaWebSocket()
-print("CONNECT")
 ASEDEB.test_pipe_ws:connect(ASEDEB.config.test_endpoint)
-print("ENDCON")
 
 local res, msg = xpcall(function() dofile(ASEDEB.config.test_script) end, debug.traceback)
 
-ASEDEB.testAssert(res, msg)
+if ASEDEB.config.report_errors then
+    ASEDEB.testAssert(res, msg)
+end

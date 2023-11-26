@@ -38,6 +38,8 @@ namespace TestRunner
         /// </summary>
         public string? server_state = null;
 
+        // whether to wait for aseprite to close to complete the test, this can be turned on and off during a test.
+        public bool fail_on_timeout = true;
         public WebSocketTester(ITestOutputHelper output) =>
             this.output = output;
 
@@ -140,7 +142,7 @@ namespace TestRunner
 
             if (timed_out)
             {
-                if (assert)
+                if (assert && fail_on_timeout)
                     Assert.Fail($"Mock debug adapter was still running after timeout. ({timeout} s)\nStage:\t{server_state ?? "Unknown"}");
 
                 return false;

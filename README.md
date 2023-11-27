@@ -67,11 +67,11 @@ The debuggable source code should also be installed in aseprite before it is lau
 ### Debugger Communication
 
 The debugger will attempt to connect to a websocket server which listents for connections on the endpoint specified in the 'config.json' file.
-The messagese sent and received are all Debug Adapter Protocol messages, so these should simply be forwarded to the client.
+The messagese sent and received are all Debug Adapter Protocol messages, so these should simply be piped between the client and the debugger.
 
 The one exception is the StackTraceUpdate event, which is sent everytime the stacktrace is updated by the debugger.
-This event represents either a push, pop or update event on a list, which contains a stacktrace of the debug session.
-See [StackTraceHandler.lua](src/Debugger/StackTraceHandler.lua), for how to implement handling of event.
+This event represents either a push, pop or update event on a stack, which contains a stacktrace of the debug session.
+See [StackTraceHandler.lua](src/Debugger/StackTraceHandler.lua), for how to implement handling of the event.
 
 The event is primarily used for cases where communications with the debugger has been lost, as this allows the debug adapter to keep its own stacktrace, which can be used as a placeholder for the actual stacktrace in a StackTraceRequest.
 
